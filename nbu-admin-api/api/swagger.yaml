@@ -1,0 +1,4502 @@
+openapi: 3.0.0
+info:
+  title: NetBackup Administration API
+  description: |
+    The NetBackup Administration API provides access to administrative operations in NetBackup.
+  version: "4.0"
+externalDocs:
+  description: Getting Started Guide
+  url: http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started/
+servers:
+- url: https://<masterserver>:1556/netbackup
+  description: NetBackup Master
+paths:
+  /admin/hosts/{hostId}/processes:
+    get:
+      tags:
+      - Hosts
+      description: |
+        Get the list of NetBackup processes running on the specified host.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|HOSTS|PROCESSES|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+      parameters:
+      - name: hostId
+        in: path
+        description: The unique ID (UUID) of the host. See the 'uuid' attribute of
+          the response of GET /config/hosts API.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      - name: filter
+        in: query
+        description: |
+          Filter criteria syntax is based on OData standards. Filtering is supported on the following attributes:
+          |Name|Supported Operators|Description|Schema|
+          |---|---|---|---|
+          |processName|eq|The process name.|string|
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Successfully retrieved the list of processes.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No host exists with the specified host ID.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs:
+    get:
+      tags:
+      - Jobs
+      description: |
+        Gets the list of jobs based on specified filters. If no filters are specified, information for 10 jobs sorted in
+        descending order by job start time is retrieved.
+
+        To avoid sending large set of jobs data, API returns only subset of data (default size 10). To fetch additional
+        results, take advantage of pagination using `page[Offset]` & `page[limit]`  which allows for subsequent requests
+        to "page" through the rest of the results until the end is reached.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+        A given principal can also view the jobs that they initiate even if they are not granted the Jobs view operation.
+      parameters:
+      - name: filter
+        in: query
+        description: |
+          Filter criteria syntax is based on OData standards. Filtering is supported on the following attributes:
+          |Name|Supported Operators|Description|Schema|
+          |---|---|---|---|
+          |jobId|eq ne lt gt le ge|The job identifier.|integer|
+          |parentJobId|eq ne lt gt le ge|The parent job identifier.|integer|
+          |clientName|eq ne contains, startswith, endswith|The name of the client to protect. If the client name contains a space or "%", encode these characters as '%20' or '%25', respectively.|string|
+          |endTime|eq ne lt gt le ge|The time when the job finished.|date-time|
+          |startTime|eq ne lt gt le ge|The time when the job started.|date-time|
+          |state|eq ne|The state of the job. Possible values: QUEUED, ACTIVE, REQUEUED, DONE, SUSPENDED, INCOMPLETE|string|
+          |status|eq ne lt gt le ge|The final job status code.|integer|
+          |jobType|eq ne|The type of the job. Possible values: BACKUP, ARCHIVE, RESTORE, VERIFY, DUPLICATE, IMPORT, DBBACKUP, VAULT, LABEL, ERASE, TPREQ, TPCLEAN, TPFORMAT, VMPHYSINV, DQTS, DBRECOVER, MCONTENTS, IMAGEDELETE, GENERIC, REPLICATE, REPLICA_IMPORT, SNAPDUPE, SNAPREPLICATE, SNAPIMPORT, APP_STATE_CAPTURE, INDEXING, INDEXCLEANUP, SNAPINDEX, ACTIVATE_IR, DEACTIVATE_IR, REACTIVATE_IR, STOP_IR, INSTANT_RECOVERY, RMAN_CATALOG, LOCKVM, CLOUD_SNAPSHOT_REPLICATE|string|
+          |policyName|contains, startswith, endswith|The name of the policy used by this job.|string|
+          |policyType|eq ne|The type of the policy. Possible values: STANDARD, PROXY, NONSTANDARD, APOLLO_WBAK, OBACKUP, ANY, INFORMIX, SYBASE, SHAREPOINT, WINDOWS, NETWARE, BACKTRACK, AUSPEX_FASTBACK, WINDOWS_NT, OS2, SQL_SERVER, EXCHANGE, SAP, DB2, NDMP, FLASHBACKUP, SPLITMIRROR, AFS, DFS, DATASTORE, LOTUS_NOTES, NCR_TERADATA, VAX_VMS, HP3000_MPE, FBU_WINDOWS, VAULT, BE_SQL_SERVER, BE_EXCHANGE, MAC, DS, NBU_CATALOG, GENERIC, CMS_DB, PUREDISK_EXPORT, ENTERPRISE_VAULT, VMWARE, HYPERV, NBU_SEARCHSERVER, HYPERSCALE, BIGDATA, CLOUD, DEPLOYMENT, HYPERVISOR, UNIVERSAL_SHARE, NAS_DATA_PROTECTION|string|
+          |restoreBackupIDs|eq, ne, contains, startswith, endswith|The backup images used for restore. If the client name contains a space or "%", encode these characters as '%20' or '%25', respectively.|string|
+          |initiatorId|eq, ne, contains, startswith, endswith|The initiator of the job.|string|
+          |assetID|eq|The asset identifier.|string|
+          |destinationStorageUnitName|eq|The destination storage unit name.|string|
+          |destinationMediaId|eq|The destination media id.|string|
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+      - name: "page[offset]"
+        in: query
+        description: The job record number offset.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+      - name: "page[limit]"
+        in: query
+        description: The number of records on one page after the offset.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+      - name: sort
+        in: query
+        description: Sorts in ascending order on the specified property. Prefix with
+          '-' for descending order.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: |
+            Successfully retrieved the list of jobs based on the specified filters. No data is returned if no jobs are found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}:
+    get:
+      tags:
+      - Jobs
+      description: |
+        Gets the job details for the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+        A given principal can also view the jobs that they initiate even if they are not granted the Jobs view operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Successfully retrieved the job details for the specified job.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+    delete:
+      tags:
+      - Jobs
+      description: |
+        Deletes the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|DELETE|`
+        A given principal can also manage the jobs that they initiate even if they are not granted the Jobs delete operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      - name: X-NetBackup-Audit-Reason
+        in: header
+        description: |
+          Audit reason for the action being performed. This value must be URL-encoded. Maximum 512 bytes, in UTF-8 encoding. The remaining bytes are truncated.
+        required: false
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "202":
+          description: Request accepted.
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/progress-logs:
+    get:
+      tags:
+      - Jobs
+      description: |
+        Gets progress logs for the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+        A given principal can also view the related progress logs for the jobs that they initiate even if they are not granted the Jobs view operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      - name: "page[limit]"
+        in: query
+        description: The number of progress logs on one page.
+        required: false
+        style: form
+        explode: true
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          default: 10
+      - name: "page[offset]"
+        in: query
+        description: The progress log offset.
+        required: false
+        style: form
+        explode: true
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      responses:
+        "200":
+          description: Successfully retrieved the progress-logs for the specified
+            job.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/try-logs:
+    get:
+      tags:
+      - Jobs
+      description: |
+        Gets logs for the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+        A given principal can also view the related try-logs for the jobs that they initiate even if they are not granted the Jobs view operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Successfully retrieved the try-logs for the specified job.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_4'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/try-logs/{attempt}:
+    get:
+      tags:
+      - Jobs
+      description: |
+        Gets the try-logs for the specified job ID and the specified try number.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+        A given principal can also view the related try-logs for the jobs that they initiate even if they are not granted the Jobs view operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      - name: attempt
+        in: path
+        description: The try attempt for the specified job.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Successfully retrieved the try-log for the specified job.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_5'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/file-lists:
+    get:
+      tags:
+      - Jobs
+      description: |
+        Gets the file list for the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+        A given principal can also view the related file-lists for the jobs that they initiate even if they are not granted the Jobs view operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Successfully retrieved the file list for the specified job.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_6'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/cancel:
+    post:
+      tags:
+      - Jobs
+      description: |
+        Cancels the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|UPDATE|`
+        A given principal can also manage the jobs that they initiate even if they are not granted the Jobs update operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      - name: X-NetBackup-Audit-Reason
+        in: header
+        description: |
+          Audit reason for the action being performed. This value must be URL-encoded. Maximum 512 bytes, in UTF-8 encoding. The remaining bytes are truncated.
+        required: false
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "202":
+          description: Request accepted.
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/suspend:
+    post:
+      tags:
+      - Jobs
+      description: |
+        Suspends the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|UPDATE|`
+        A given principal can also manage the jobs that they initiate even if they are not granted the Jobs update operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      - name: X-NetBackup-Audit-Reason
+        in: header
+        description: |
+          Audit reason for the action being performed. This value must be URL-encoded. Maximum 512 bytes, in UTF-8 encoding. The remaining bytes are truncated.
+        required: false
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "202":
+          description: Request accepted.
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/resume:
+    post:
+      tags:
+      - Jobs
+      description: |
+        Resumes the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|UPDATE|`
+        A given principal can also manage the jobs that they initiate even if they are not granted the Jobs update operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      - name: X-NetBackup-Audit-Reason
+        in: header
+        description: |
+          Audit reason for the action being performed. This value must be URL-encoded. Maximum 512 bytes, in UTF-8 encoding. The remaining bytes are truncated.
+        required: false
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "202":
+          description: Request accepted.
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/jobs/{jobId}/restart:
+    post:
+      tags:
+      - Jobs
+      description: |
+        Restarts the specified job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-object-level-enforcement)\
+        Namespace: `|MANAGE|JOBS|`\
+        Requires Operation: `|OPERATIONS|UPDATE|`
+        A given principal can also manage the jobs that they initiate even if they are not granted the Jobs update operation.
+      parameters:
+      - name: jobId
+        in: path
+        description: The job identifier.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      - name: X-NetBackup-Audit-Reason
+        in: header
+        description: |
+          Audit reason for the action being performed. This value must be URL-encoded. Maximum 512 bytes, in UTF-8 encoding. The remaining bytes are truncated.
+        required: false
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "202":
+          description: Request accepted.
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "405":
+          description: Method not allowed. The specified HTTP operation is invalid.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/manual-backup:
+    post:
+      tags:
+      - Jobs
+      description: |
+        Start a manual backup job.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-api-level-enforcement)\
+        Namespace: `|PROTECTION|POLICIES|`\
+        Requires Operation: `|OPERATIONS|PROTECTION|POLICIES|MANUAL-BACKUP|`
+      requestBody:
+        description: The details of the manual backup to start.
+        content:
+          application/vnd.netbackup+json;version=4.0:
+            schema:
+              $ref: '#/components/schemas/admin_manualbackup_body'
+        required: true
+      responses:
+        "202":
+          description: Successfully started the job.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_202'
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/hosts/{hostId}/services:
+    get:
+      tags:
+      - Hosts
+      description: |
+        Get the list of NetBackup services on the specified host.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-api-level-enforcement)\
+        Namespace: `|MANAGE|HOSTS|PROCESSES|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+      parameters:
+      - name: hostId
+        in: path
+        description: The unique ID (UUID) of the host. See the 'uuid' attribute of
+          the response of GET /config/hosts API.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Successfully retrieved the list of NetBackup services on the
+            specified host.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_7'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No host exists with the specified host ID.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "501":
+          description: Not implemented for hosts with NetBackup release version prior
+            to 8.2.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/hosts/{hostId}/services/{serviceName}:
+    get:
+      tags:
+      - Hosts
+      description: |
+        Get the details of the given NetBackup service on the specified host.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-api-level-enforcement)\
+        Namespace: `|MANAGE|HOSTS|PROCESSES|`\
+        Requires Operation: `|OPERATIONS|VIEW|`
+      parameters:
+      - name: hostId
+        in: path
+        description: The unique ID (UUID) of the host. See the 'uuid' attribute of
+          the response of GET /config/hosts API.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      - name: serviceName
+        in: path
+        description: The service (daemon) name.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Successfully retrieved the details of the given NetBackup service
+            on the specified host.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_8'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No host exists with the specified host ID or no service exists
+            with the specified name.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "406":
+          description: Invalid `Accept` type. Make sure your `Accept` header matches
+            what this API produces.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "501":
+          description: Not implemented for hosts with NetBackup release version prior
+            to 8.2.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "503":
+          description: The server is busy.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/discovery/workloads/{workloadType}/start:
+    post:
+      tags:
+      - Discovery
+      description: |
+        Starts discovery to identify assets and topology for the specified workload type.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-api-level-enforcement)\
+        Namespace: `|ASSETS|RHV|RHVMGR|`\
+        OR
+        Namespace: `|ASSETS|VMWARE|ESX|`\
+        OR
+        Namespace: `|ASSETS|VMWARE|VCENTER|`\
+        OR
+        Namespace: `|ASSETS|VMWARE|RESTORE_ESX|`\ - only discovers topology
+        Requires Operation: `|OPERATIONS|UPDATE|`\
+        \
+        For Cloud Workload:\
+        Namespace: `|MANAGE|SNAPSHOT-MGMT-SERVER|`\
+        Requires Operation: `|OPERATIONS|MANAGE|SNAPSHOT-MGMT-SERVER|DISCOVER|`
+      parameters:
+      - name: workloadType
+        in: path
+        description: The workload type.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+          enum:
+          - vmware
+          - rhv
+          - cloud
+      requestBody:
+        description: The request body of the discovery request.
+        content:
+          application/vnd.netbackup+json;version=4.0:
+            schema:
+              $ref: '#/components/schemas/workloadType_start_body'
+        required: true
+      responses:
+        "202":
+          description: The discovery request was accepted for processing.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_202_1'
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "403":
+          description: Forbidden. An attempt to alter system-defined data was denied.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "409":
+          description: The discovery is already in progress.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+  /admin/discovery/workloads/{workloadType}/status:
+    get:
+      tags:
+      - Discovery
+      description: |
+        Gets the discovery status for the specified workload type.
+
+        **Access Control**\
+        Enforcement Type: [API-Level](http://sort.veritas.com/public/documents/nbu/8.3/windowsandunix/productguides/html/getting-started#user-content-api-level-enforcement)\
+        Namespace: `|MANAGE|SNAPSHOT-MGMT-SERVER|`\
+        OR
+        Namespace: `|ASSETS|RHV|RHVMGR|`\
+        OR
+        Namespace: `|ASSETS|VMWARE|ESX|`\
+        OR
+        Namespace: `|ASSETS|VMWARE|VCENTER|`\
+        OR
+        Namespace: `|ASSETS|VMWARE|RESTORE_ESX|`\ - only discovers topology
+        Requires Operation: `|OPERATIONS|VIEW|`
+      parameters:
+      - name: workloadType
+        in: path
+        description: The workload type.
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+          enum:
+          - vmware
+          - rhv
+          - cloud
+      - name: filter
+        in: query
+        description: |
+          Filter criteria syntax is based on OData standards. Filtering is supported on the following attributes:
+          |Name|Supported Operators|Description|Schema|
+          |---|---|---|---|
+          |serverName|eq ne contains, startswith, endswith|The name of the server.|string|
+          |workloadSubType|eq ne contains, startswith, endswith|The workload subtype.|string|
+          |discoveryStatus|eq ne|The status of the discovery process.|string|
+          |discoveryStartTime|eq ne lt gt le ge|The UTC timestamp of when the last attempted discovery started.|date-time|
+          |discoveryFinishTime|eq ne lt gt le ge|The UTC timestamp of when the last attempted discovery finished.|date-time|
+          |updateTime|eq ne lt gt le ge|The UTC timestamp of when the entry was updated.|date-time|
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+      - name: "page[offset]"
+        in: query
+        description: The discovery status record number offset.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+      - name: "page[limit]"
+        in: query
+        description: The number of records on one page after the offset.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+      - name: sort
+        in: query
+        description: Sorts in ascending order on the specified property. Prefix with
+          '-' for descending order.
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The status of the discovery process.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_9'
+        "400":
+          description: Bad request.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "401":
+          description: |
+            The `Authorization` header is missing, the token is invalid, or you do not have permission for this action.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "403":
+          description: Forbidden. An attempt to alter system-defined data was denied.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "404":
+          description: No entity found.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "415":
+          description: |
+            Unsupported Media Type. The media type specified in the `Content-Type` header is not supported by this API.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        "500":
+          description: An unexpected system error occurred.
+          content:
+            application/vnd.netbackup+json;version=4.0:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+      security:
+      - rbacSecurity: []
+components:
+  schemas:
+    paginationValues:
+      type: object
+      properties:
+        prev:
+          type: integer
+        next:
+          type: integer
+        first:
+          type: integer
+        last:
+          type: integer
+        count:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+    processListResponse:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/processListResponse_data'
+    manualBackupRequest:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/adminmanualbackup_data'
+    manualBackupResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/manualBackupResponse_data'
+    getJobByIdResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/manualBackupResponse_data'
+    getJobsResponse:
+      type: object
+      properties:
+        links:
+          $ref: '#/components/schemas/getJobsResponse_links'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/manualBackupResponse_data'
+        meta:
+          $ref: '#/components/schemas/getJobsResponse_meta'
+      example:
+        data:
+        - links:
+            self:
+              href: /admin/jobs/1
+            file-lists:
+              href: https://dummyHost:1556/netbackup/admin/jobs/1/file-lists
+            try-logs:
+              href: https://dummyHost:1556/netbackup/admin/jobs/1/try-logs
+          type: job
+          id: 1
+          attributes:
+            jobId: 1
+            parentJobId: 0
+            activeProcessId: 8624
+            mainProcessId: 0
+            jobType: IMAGEDELETE
+            jobSubType: IMMEDIATE
+            policyName: ""
+            scheduleType: FULL
+            scheduleName: ""
+            clientName: ""
+            controlHost: ""
+            jobOwner: user
+            jobGroup: ""
+            backupId: ""
+            sourceMediaId: ""
+            sourceStorageUnitName: ""
+            sourceMediaServerName: ""
+            destinationMediaId: ""
+            destinationStorageUnitName: ""
+            destinationMediaServerName: ""
+            dataMovement: STANDARD
+            streamNumber: 0
+            copyNumber: 0
+            priority: 0
+            retentionLevel: 0
+            compression: 0
+            status: 0
+            state: DONE
+            done: 1
+            numberOfFiles: 0
+            estimatedFiles: 0
+            kilobytesTransferred: 0
+            kilobytesToTransfer: 0
+            transferRate: 0
+            percentComplete: 100
+            restartable: 0
+            suspendable: 0
+            resumable: 0
+            killable: 1
+            frozenImage: 0
+            transportType: LAN
+            currentOperation: 0
+            jobQueueReason: 0
+            jobQueueResource: ""
+            robotName: ""
+            vaultName: ""
+            profileName: ""
+            sessionId: 0
+            numberOfTapeToEject: 0
+            submissionType: 0
+            dumpHost: ""
+            instanceDatabaseName: ""
+            auditUserName: ""
+            auditDomainName: ""
+            auditDomainType: 0
+            restoreBackupIDs: ""
+            startTime: 2018-06-25T19:00:32.000Z
+            endTime: 2018-06-25T19:00:38.000Z
+            activeTryStartTime: 2018-06-25T19:00:32.000Z
+            lastUpdateTime: 2018-06-25T19:00:38.407Z
+            kilobytesDataTransferred: 0
+            initiatorId: ""
+            try: 1
+            assetID: ""
+            assetDisplayableName: ""
+            elapsedTime: 00:00:06
+        - links:
+            self:
+              href: /admin/jobs/2
+            file-lists:
+              href: https://dummyHost:1556/netbackup/admin/jobs/2/file-lists
+            try-logs:
+              href: https://dummyHost:1556/netbackup/admin/jobs/2/try-logs
+          type: job
+          id: 2
+          attributes:
+            jobId: 2
+            parentJobId: 0
+            activeProcessId: 8625
+            mainProcessId: 0
+            jobType: IMAGEDELETE
+            jobSubType: IMMEDIATE
+            policyName: ""
+            scheduleType: FULL
+            scheduleName: ""
+            clientName: ""
+            controlHost: ""
+            jobOwner: user
+            jobGroup: ""
+            backupId: ""
+            sourceMediaId: ""
+            sourceStorageUnitName: ""
+            sourceMediaServerName: ""
+            destinationMediaId: ""
+            destinationStorageUnitName: ""
+            destinationMediaServerName: ""
+            dataMovement: STANDARD
+            streamNumber: 0
+            copyNumber: 0
+            priority: 0
+            retentionLevel: 0
+            compression: 0
+            status: 0
+            state: DONE
+            done: 1
+            numberOfFiles: 0
+            estimatedFiles: 0
+            kilobytesTransferred: 0
+            kilobytesToTransfer: 0
+            transferRate: 0
+            percentComplete: 100
+            restartable: 0
+            suspendable: 0
+            resumable: 0
+            killable: 1
+            frozenImage: 0
+            transportType: LAN
+            currentOperation: 0
+            jobQueueReason: 0
+            jobQueueResource: ""
+            robotName: ""
+            vaultName: ""
+            profileName: ""
+            sessionId: 0
+            numberOfTapeToEject: 0
+            submissionType: 0
+            dumpHost: ""
+            instanceDatabaseName: ""
+            auditUserName: ""
+            auditDomainName: ""
+            auditDomainType: 0
+            restoreBackupIDs: ""
+            startTime: 2018-06-25T19:00:32.000Z
+            endTime: 2018-06-25T19:00:38.000Z
+            activeTryStartTime: 2018-06-25T19:00:32.000Z
+            lastUpdateTime: 2018-06-25T19:00:38.407Z
+            kilobytesDataTransferred: 0
+            initiatorId: ""
+            try: 1
+            elapsedTime: 00:00:06
+            assetID: ""
+            assetDisplayableName: ""
+    getJobProgressLogsResponse:
+      required:
+      - data
+      - meta
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/getJobProgressLogsResponse_data'
+        meta:
+          $ref: '#/components/schemas/getJobProgressLogsResponse_meta'
+    getJobProgressEntryResponse:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        id:
+          type: integer
+          description: The offset of the log message.
+        type:
+          type: string
+          enum:
+          - getJobProgressEntryResponse
+        attributes:
+          $ref: '#/components/schemas/getJobProgressLogsResponse_attributes'
+    getJobTryLogsResponse:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/getJobTryLogsResponse_data'
+      example:
+        data:
+        - links:
+            self:
+              href: /admin/jobs/1/try-logs/1
+            next:
+              href: /admin/jobs/1/try-logs/2
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-1
+          attributes:
+            tryJobId: 1
+            tryNumber: 1
+            tryStartTime: 2018-09-27T08:29:32Z
+            tryEndTime: 2018-09-27T08:29:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 1234
+            trySessionId: 4523
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryTapesToEject: 3
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryTransportMode: FIBRE_TRANSPORT
+            tryLog:
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: INFO
+              message: bpdbm (pid=16548) image catalog cleanup
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: WARNING
+              message: "bpdbm (pid=16548) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:29:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:29:35Z
+              message: restored from image dummy-vm2_1538012955
+        - links:
+            self:
+              href: /admin/jobs/1/try-logs/2
+            prev:
+              href: /admin/jobs/1/try-logs/1
+            next:
+              href: /admin/jobs/1/try-logs/3
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-2
+          attributes:
+            tryJobId: 1
+            tryNumber: 2
+            tryStartTime: 2018-09-27T08:39:32Z
+            tryEndTime: 2018-09-27T08:39:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 4215
+            trySessionId: 4564
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryTransportMode: FIBRE_TRANSPORT
+            tryLog:
+            - timestamp: 2018-09-27T08:39:32Z
+              severity: INFO
+              message: bpdbm (pid=16559) image catalog cleanup
+            - timestamp: 2018-09-27T08:39:32Z
+              severity: WARNING
+              message: "bpdbm (pid=16559) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:39:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:39:35Z
+              message: restored from image dummy-vm2_1538012955
+        - links:
+            self:
+              href: /admin/jobs/1/try-logs/3
+            prev:
+              href: /admin/jobs/1/try-logs/2
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-3
+          attributes:
+            tryJobId: 1
+            tryNumber: 3
+            tryStartTime: 2018-09-27T08:49:32Z
+            tryEndTime: 2018-09-27T08:49:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 4321
+            trySessionId: 4567
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryTapesToEject: 4
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryTransportMode: FIBRE_TRANSPORT
+            tryLog:
+            - timestamp: 2018-09-27T08:49:32Z
+              severity: INFO
+              message: bpdbm (pid=17548) image catalog cleanup
+            - timestamp: 2018-09-27T08:49:32Z
+              severity: WARNING
+              message: "bpdbm (pid=17548) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:49:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:49:35Z
+              message: restored from image dummy-vm2_1538012955
+    getIndividualTryResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/getJobTryLogsResponse_data'
+      example:
+        data:
+          links:
+            self:
+              href: /admin/jobs/1/try-logs/2
+            prev:
+              href: /admin/jobs/1/try-logs/1
+            next:
+              href: /admin/jobs/1/try-logs/3
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-2
+          attributes:
+            tryJobId: 1
+            tryNumber: 2
+            tryStartTime: 2018-09-27T08:29:32Z
+            tryEndTime: 2018-09-27T08:29:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 1234
+            trySessionId: 4567
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryTapesToEject: 4
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryLog:
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: INFO
+              message: bpdbm (pid=16548) image catalog cleanup
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: WARNING
+              message: "bpdbm (pid=16548) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:29:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:29:35Z
+              message: restored from image dummy-vm2_1538012955
+    getJobTryAttemptResponse:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - parsedTryLogResponse
+        id:
+          type: string
+        links:
+          $ref: '#/components/schemas/getJobTryLogsResponse_links'
+        attributes:
+          $ref: '#/components/schemas/getJobTryLogsResponse_attributes'
+    getJobFileListResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/getJobFileListResponse_data'
+      example:
+        data:
+          links:
+            self:
+              href: /admin/jobs/1/file-lists
+          type: file-lists
+          id: 1
+          attributes:
+            fileList:
+            - C:\BackupSource\MyFolder
+    getJobDetailsResponse:
+      type: object
+      properties:
+        type:
+          type: string
+        id:
+          type: string
+        links:
+          $ref: '#/components/schemas/manualBackupResponse_links'
+        attributes:
+          $ref: '#/components/schemas/manualBackupResponse_attributes'
+    jobPostRequest:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/jobPostRequest_data'
+    jobPatchRequest:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/jobPatchRequest_data'
+    jobData:
+      required:
+      - jobSubType
+      - jobType
+      type: object
+      properties:
+        jobType:
+          type: string
+          description: The job type.
+          enum:
+          - INSTANT_ACCESS
+        jobSubType:
+          type: string
+          description: The job subtype.
+          enum:
+          - IA_CREATE_VM
+          - IA_DELETE_VM
+          - IA_CREATE_MOUNT
+          - IA_DELETE_MOUNT
+          - IA_FILE_RESTORE
+          - IA_GET_DOWNLOAD_URL
+          - IA_ATTACH_DATABASE
+          - IA_DETACH_DATABASE
+        policyType:
+          type: string
+          description: The type of backup policy that is associated with the job.
+          enum:
+          - MS-SQL-SERVER
+          - VMWARE
+        jobGroup:
+          type: string
+          description: The name of the group that initiated the job.
+        jobOwner:
+          type: string
+          description: The job owner or the user that initiated the job.
+        auditUserName:
+          type: string
+          description: The user name in the audit record.
+        auditDomainName:
+          type: string
+          description: The domain name in the audit record.
+        auditDomainType:
+          type: integer
+          description: The domain type in the audit record.
+        restartable:
+          type: boolean
+          description: Indicates if the job can be restarted.
+          default: false
+        cancellable:
+          type: boolean
+          description: Indicates if the job can be stopped.
+          default: false
+        resumable:
+          type: boolean
+          description: Indicates if the job can be resumed.
+          default: false
+        suspendable:
+          type: boolean
+          description: Indicates if the job can be suspended.
+          default: false
+        controlHost:
+          type: string
+          description: The host from which the job was initiated.
+        sourceMediaServerName:
+          type: string
+          description: The name of the source media server.
+        destinationMediaServerName:
+          type: string
+          description: The name of the destination media server.
+    jobUpdateData:
+      type: object
+      properties:
+        restoreBackupIDs:
+          type: array
+          description: The identifier for the backup image that was used for the restore.
+          items:
+            type: string
+        startTime:
+          type: string
+          description: The UTC timestamp for when the job was started.
+          format: date-time
+        endTime:
+          type: string
+          description: The UTC timestamp for when the job ended.
+          format: date-time
+        activeTryStartTime:
+          type: string
+          description: A UTC timestamp for when the current try started.
+        lastUpdateTime:
+          type: string
+          description: The UTC timestamp for when the job was modified.
+          format: date-time
+        state:
+          type: string
+          description: The current state of the job.
+          enum:
+          - QUEUED
+          - ACTIVE
+          - REQUEUED
+          - DONE
+          - SUSPENDED
+          - INCOMPLETE
+        status:
+          type: integer
+          description: The final job status code.
+        newTry:
+          type: boolean
+          description: Indicates if a new try log should be started.
+          default: false
+        endTry:
+          type: boolean
+          description: Indicates if the current try log should end.
+          default: false
+        startTrack:
+          type: boolean
+          description: If set to true bpjobd will track the job.
+          default: true
+        stopTrack:
+          type: boolean
+          description: Indicates if bpjobd will stop tracking the job.
+          default: false
+        done:
+          type: boolean
+          description: Indicates if bpjobd will track the job.
+          default: false
+        tryLogList:
+          $ref: '#/components/schemas/jobPostRequest_data_attributes_jobUpdateData_tryLogList'
+        fileList:
+          type: array
+          items:
+            type: string
+    tryLogList:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/jobPostRequest_data_attributes_jobUpdateData_tryLogList_data'
+    tryLogLOGEntry:
+      required:
+      - message
+      - pid
+      - program
+      - severity
+      - timestamp
+      type: object
+      properties:
+        timestamp:
+          type: string
+          description: The UTC timestamp of when the try log entry was created.
+          format: date-time
+        severity:
+          type: string
+          description: The severity of the log message.
+          enum:
+          - UNKNOWN
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+          - CRITICAL
+        program:
+          type: string
+          description: The name of the process or program.
+        pid:
+          type: integer
+          description: The process ID.
+        message:
+          type: string
+          description: The log message.
+      description: The try log entry for the type 'LOG'.
+    serviceListResponse:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/serviceListResponse_data'
+    serviceResponse:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/serviceListResponse_data'
+    serviceDetails:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The resource type.
+          enum:
+          - service
+        id:
+          type: string
+          description: The name of the service (daemon).
+        attributes:
+          $ref: '#/components/schemas/serviceListResponse_attributes'
+    discoveryRequest:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/admindiscoveryworkloadsworkloadTypestart_data'
+      description: The discovery request schema.
+    discoveryStatusPage:
+      required:
+      - data
+      type: object
+      properties:
+        links:
+          $ref: '#/components/schemas/getJobsResponse_links'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/discoveryStatusPage_data'
+        meta:
+          $ref: '#/components/schemas/getJobsResponse_meta'
+      description: The discovery status response schema.
+      example:
+        data:
+        - type: discovery-status
+          id: some.server.com
+          attributes:
+            workloadType: VMware
+            discoveryStatus: SUCCESS
+            discoveryStartTime: 2019-02-21T00:48:21.874Z
+            discoveryFinishTime: 2019-02-21T00:48:28.413Z
+            updatedAt: 2019-02-21T00:48:28.416Z
+            additionalAttributes:
+              discoveryHost: 10.80.97.207
+              discoveryFrequencySeconds: 301
+              isDiscoveryDisabled: false
+        meta:
+          pagination:
+            pages: 1
+            last: 0
+            offset: 0
+            limit: 10
+            count: 1
+            page: 0
+            first: 0
+        links:
+          self:
+            href: "https://some.server.com:1556/netbackup/admin/discovery/workloads/vmware/status?page[offset]=0&page[limit]=10&filter=contains(serverName,'com')"
+          last:
+            href: "https://some.server.com:1556/netbackup/admin/discovery/workloads/vmware/status?page[offset]=0&page[limit]=10&filter=contains(serverName,'com')"
+          first:
+            href: "https://some.server.com:1556/netbackup/admin/discovery/workloads/vmware/status?page[offset]=0&page[limit]=10&filter=contains(serverName,'com')"
+    getDiscoveryStatusResponse:
+      required:
+      - discoveryFinishTime
+      - discoveryStartTime
+      - discoveryStatus
+      - serverName
+      - updateTime
+      - workloadSubType
+      - workloadType
+      properties:
+        serverName:
+          type: string
+          description: The name of the server.
+        workloadType:
+          type: string
+          enum:
+          - VMware
+          - RHV
+          - CLOUD
+        workloadSubType:
+          type: string
+          description: The subtype as defined by the workload.
+        discoveryStatus:
+          type: string
+          description: The status of the discovery process.
+          enum:
+          - RUNNING
+          - SUCCESS
+          - FAILED
+          - UNKNOWN
+        discoveryStartTime:
+          type: string
+          description: The UTC timestamp of when the last attempted discovery started.
+          format: date-time
+        discoveryFinishTime:
+          type: string
+          description: The UTC timestamp of when the last attempted discovery finished.
+          format: date-time
+        updateTime:
+          type: string
+          description: The UTC timestamp of when the entry was updated.
+          format: date-time
+        additionalAttributes:
+          $ref: '#/components/schemas/discoveryStatusPage_attributes_additionalAttributes'
+    discoveryStatus:
+      type: string
+      description: The status of the discovery process.
+      enum:
+      - RUNNING
+      - SUCCESS
+      - FAILED
+      - UNKNOWN
+    workloadName:
+      type: string
+      enum:
+      - VMware
+      - RHV
+      - CLOUD
+    discoveryResponse:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/discoveryResponse_data'
+      description: The discovery API response schema.
+    discoveryResponseTypes:
+      type: string
+      description: The response type that is associated with discovery request.
+      enum:
+      - vmwareDiscovery
+      - rhvDiscovery
+      - cloudDiscovery
+    discoveryResponseAttributes:
+      type: object
+      properties:
+        serverName:
+          type: string
+          description: |
+            The name of the server for which the discovery request was submitted.
+            Applies to the following response types: [vmwareDiscovery, rhvDiscovery, cloudDiscovery]
+        discoveryHost:
+          type: string
+          description: |
+            The NetBackup host used to perform the discovery.
+            Applies to the following response types: [vmwareDiscovery, rhvDiscovery]
+    inline_response_200:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/processListResponse_data'
+      example:
+        data:
+        - attributes:
+            memoryUsageMB: 1.4658129805029452
+            processName: processName
+            startTime: 2000-01-23T04:56:07.000+00:00
+            arguments: arguments
+            priority: 6
+            ppid: 0
+            elapsedTime: elapsedTime
+            username: username
+          id: id
+          type: process
+        - attributes:
+            memoryUsageMB: 1.4658129805029452
+            processName: processName
+            startTime: 2000-01-23T04:56:07.000+00:00
+            arguments: arguments
+            priority: 6
+            ppid: 0
+            elapsedTime: elapsedTime
+            username: username
+          id: id
+          type: process
+    inline_response_401:
+      required:
+      - errorCode
+      - errorMessage
+      type: object
+      properties:
+        errorCode:
+          type: integer
+          description: The NetBackup error code.
+          format: int64
+        errorMessage:
+          type: string
+          description: The NetBackup error code description.
+        attributeErrors:
+          type: object
+          description: |
+            Maps the attributes with the invalid values to an error that describes why the value is invalid, to provide more context to the nature of the error.
+        errorDetails:
+          type: array
+          description: A list that contains additional information about the error.
+          items:
+            type: string
+        fileUploadErrors:
+          type: array
+          description: |
+            If an API is supporting content-type multipart/form-data, then this holds a list of objects that contains names of failed files and associated error messages.
+          items:
+            type: object
+    inline_response_200_1:
+      type: object
+      properties:
+        links:
+          $ref: '#/components/schemas/getJobsResponse_links'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/manualBackupResponse_data'
+        meta:
+          $ref: '#/components/schemas/getJobsResponse_meta'
+      example:
+        data:
+        - links:
+            self:
+              href: /admin/jobs/1
+            file-lists:
+              href: https://dummyHost:1556/netbackup/admin/jobs/1/file-lists
+            try-logs:
+              href: https://dummyHost:1556/netbackup/admin/jobs/1/try-logs
+          type: job
+          id: 1
+          attributes:
+            jobId: 1
+            parentJobId: 0
+            activeProcessId: 8624
+            mainProcessId: 0
+            jobType: IMAGEDELETE
+            jobSubType: IMMEDIATE
+            policyName: ""
+            scheduleType: FULL
+            scheduleName: ""
+            clientName: ""
+            controlHost: ""
+            jobOwner: user
+            jobGroup: ""
+            backupId: ""
+            sourceMediaId: ""
+            sourceStorageUnitName: ""
+            sourceMediaServerName: ""
+            destinationMediaId: ""
+            destinationStorageUnitName: ""
+            destinationMediaServerName: ""
+            dataMovement: STANDARD
+            streamNumber: 0
+            copyNumber: 0
+            priority: 0
+            retentionLevel: 0
+            compression: 0
+            status: 0
+            state: DONE
+            done: 1
+            numberOfFiles: 0
+            estimatedFiles: 0
+            kilobytesTransferred: 0
+            kilobytesToTransfer: 0
+            transferRate: 0
+            percentComplete: 100
+            restartable: 0
+            suspendable: 0
+            resumable: 0
+            killable: 1
+            frozenImage: 0
+            transportType: LAN
+            currentOperation: 0
+            jobQueueReason: 0
+            jobQueueResource: ""
+            robotName: ""
+            vaultName: ""
+            profileName: ""
+            sessionId: 0
+            numberOfTapeToEject: 0
+            submissionType: 0
+            dumpHost: ""
+            instanceDatabaseName: ""
+            auditUserName: ""
+            auditDomainName: ""
+            auditDomainType: 0
+            restoreBackupIDs: ""
+            startTime: 2018-06-25T19:00:32.000Z
+            endTime: 2018-06-25T19:00:38.000Z
+            activeTryStartTime: 2018-06-25T19:00:32.000Z
+            lastUpdateTime: 2018-06-25T19:00:38.407Z
+            kilobytesDataTransferred: 0
+            initiatorId: ""
+            try: 1
+            assetID: ""
+            assetDisplayableName: ""
+            elapsedTime: 00:00:06
+        - links:
+            self:
+              href: /admin/jobs/2
+            file-lists:
+              href: https://dummyHost:1556/netbackup/admin/jobs/2/file-lists
+            try-logs:
+              href: https://dummyHost:1556/netbackup/admin/jobs/2/try-logs
+          type: job
+          id: 2
+          attributes:
+            jobId: 2
+            parentJobId: 0
+            activeProcessId: 8625
+            mainProcessId: 0
+            jobType: IMAGEDELETE
+            jobSubType: IMMEDIATE
+            policyName: ""
+            scheduleType: FULL
+            scheduleName: ""
+            clientName: ""
+            controlHost: ""
+            jobOwner: user
+            jobGroup: ""
+            backupId: ""
+            sourceMediaId: ""
+            sourceStorageUnitName: ""
+            sourceMediaServerName: ""
+            destinationMediaId: ""
+            destinationStorageUnitName: ""
+            destinationMediaServerName: ""
+            dataMovement: STANDARD
+            streamNumber: 0
+            copyNumber: 0
+            priority: 0
+            retentionLevel: 0
+            compression: 0
+            status: 0
+            state: DONE
+            done: 1
+            numberOfFiles: 0
+            estimatedFiles: 0
+            kilobytesTransferred: 0
+            kilobytesToTransfer: 0
+            transferRate: 0
+            percentComplete: 100
+            restartable: 0
+            suspendable: 0
+            resumable: 0
+            killable: 1
+            frozenImage: 0
+            transportType: LAN
+            currentOperation: 0
+            jobQueueReason: 0
+            jobQueueResource: ""
+            robotName: ""
+            vaultName: ""
+            profileName: ""
+            sessionId: 0
+            numberOfTapeToEject: 0
+            submissionType: 0
+            dumpHost: ""
+            instanceDatabaseName: ""
+            auditUserName: ""
+            auditDomainName: ""
+            auditDomainType: 0
+            restoreBackupIDs: ""
+            startTime: 2018-06-25T19:00:32.000Z
+            endTime: 2018-06-25T19:00:38.000Z
+            activeTryStartTime: 2018-06-25T19:00:32.000Z
+            lastUpdateTime: 2018-06-25T19:00:38.407Z
+            kilobytesDataTransferred: 0
+            initiatorId: ""
+            try: 1
+            elapsedTime: 00:00:06
+            assetID: ""
+            assetDisplayableName: ""
+    inline_response_200_2:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/manualBackupResponse_data'
+      example:
+        data:
+          links:
+            file-lists: null
+            try-logs: null
+            self:
+              href: href
+          attributes:
+            scheduleName: scheduleName
+            applicationType: NONE
+            auditDomainType: 5
+            resumable: 6
+            retentionLevel: 8
+            restartable: 9
+            backupId: backupId
+            frozenImage: 2
+            destinationMediaServerName: destinationMediaServerName
+            cancellable: 7
+            currentOperation: 7
+            dataMovement: STANDARD
+            mainProcessId: 6
+            controlHost: controlHost
+            state: QUEUED
+            activeTryStartTime: 2000-01-23T04:56:07.000+00:00
+            kilobytesToTransfer: 1
+            policyName: policyName
+            robotName: robotName
+            initiatorId: initiatorId
+            jobOwner: jobOwner
+            jobGroup: jobGroup
+            priority: 9
+            destinationMediaId: destinationMediaId
+            offHostType: STANDARD
+            jobId: 0
+            numberOfFiles: 7
+            sourceMediaId: sourceMediaId
+            sourceStorageUnitName: sourceStorageUnitName
+            auditUserName: auditUserName
+            scheduleType: FULL_BACKUP
+            vaultName: vaultName
+            copyNumber: 2
+            try: 6
+            compression: 5
+            jobSubType: IMMEDIATE
+            activeProcessId: 1
+            kilobytesDataTransferred: 1
+            lastUpdateTime: 2000-01-23T04:56:07.000+00:00
+            status: 6
+            profileName: profileName
+            assetDisplayableName: assetDisplayableName
+            clientName: clientName
+            jobQueueReason: 4
+            numberOfTapeToEject: 1
+            dumpHost: dumpHost
+            kilobytesTransferred: 1
+            streamNumber: 3
+            transferRate: 2
+            restoreBackupIDs: restoreBackupIDs
+            submissionType: 6
+            suspendable: 1
+            instanceDatabaseName: instanceDatabaseName
+            destinationStorageUnitName: destinationStorageUnitName
+            currentFile: currentFile
+            startTime: 2000-01-23T04:56:07.000+00:00
+            transportType: LAN
+            jobType: BACKUP
+            dedupRatio: 9.301444
+            jobQueueResource: jobQueueResource
+            percentComplete: 5
+            sessionId: 9
+            estimatedFiles: 3
+            assetID: assetID
+            parentJobId: 4
+            sourceMediaServerName: sourceMediaServerName
+            acceleratorOptimization: 6
+            policyType: STANDARD
+            endTime: 2000-01-23T04:56:07.000+00:00
+            auditDomainName: auditDomainName
+            elapsedTime: elapsedTime
+          id: id
+          type: type
+    inline_response_200_3:
+      required:
+      - data
+      - meta
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/getJobProgressLogsResponse_data'
+        meta:
+          $ref: '#/components/schemas/getJobProgressLogsResponse_meta'
+      example:
+        data:
+        - attributes:
+            message: message
+          id: 0
+          type: getJobProgressEntryResponse
+        - attributes:
+            message: message
+          id: 0
+          type: getJobProgressEntryResponse
+        meta:
+          pagination:
+            next: 1
+            last: 5
+            offset: 7
+            prev: 6
+            count: 2
+            limit: 9
+            first: 5
+    inline_response_200_4:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/getJobTryLogsResponse_data'
+      example:
+        data:
+        - links:
+            self:
+              href: /admin/jobs/1/try-logs/1
+            next:
+              href: /admin/jobs/1/try-logs/2
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-1
+          attributes:
+            tryJobId: 1
+            tryNumber: 1
+            tryStartTime: 2018-09-27T08:29:32Z
+            tryEndTime: 2018-09-27T08:29:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 1234
+            trySessionId: 4523
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryTapesToEject: 3
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryTransportMode: FIBRE_TRANSPORT
+            tryLog:
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: INFO
+              message: bpdbm (pid=16548) image catalog cleanup
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: WARNING
+              message: "bpdbm (pid=16548) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:29:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:29:35Z
+              message: restored from image dummy-vm2_1538012955
+        - links:
+            self:
+              href: /admin/jobs/1/try-logs/2
+            prev:
+              href: /admin/jobs/1/try-logs/1
+            next:
+              href: /admin/jobs/1/try-logs/3
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-2
+          attributes:
+            tryJobId: 1
+            tryNumber: 2
+            tryStartTime: 2018-09-27T08:39:32Z
+            tryEndTime: 2018-09-27T08:39:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 4215
+            trySessionId: 4564
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryTransportMode: FIBRE_TRANSPORT
+            tryLog:
+            - timestamp: 2018-09-27T08:39:32Z
+              severity: INFO
+              message: bpdbm (pid=16559) image catalog cleanup
+            - timestamp: 2018-09-27T08:39:32Z
+              severity: WARNING
+              message: "bpdbm (pid=16559) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:39:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:39:35Z
+              message: restored from image dummy-vm2_1538012955
+        - links:
+            self:
+              href: /admin/jobs/1/try-logs/3
+            prev:
+              href: /admin/jobs/1/try-logs/2
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-3
+          attributes:
+            tryJobId: 1
+            tryNumber: 3
+            tryStartTime: 2018-09-27T08:49:32Z
+            tryEndTime: 2018-09-27T08:49:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 4321
+            trySessionId: 4567
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryTapesToEject: 4
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryTransportMode: FIBRE_TRANSPORT
+            tryLog:
+            - timestamp: 2018-09-27T08:49:32Z
+              severity: INFO
+              message: bpdbm (pid=17548) image catalog cleanup
+            - timestamp: 2018-09-27T08:49:32Z
+              severity: WARNING
+              message: "bpdbm (pid=17548) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:49:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:49:35Z
+              message: restored from image dummy-vm2_1538012955
+    inline_response_200_5:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/getJobTryLogsResponse_data'
+      example:
+        data:
+          links:
+            self:
+              href: /admin/jobs/1/try-logs/2
+            prev:
+              href: /admin/jobs/1/try-logs/1
+            next:
+              href: /admin/jobs/1/try-logs/3
+            first:
+              href: /admin/jobs/1/try-logs/1
+            last:
+              href: /admin/jobs/1/try-logs/3
+          type: parsedTryLogResponse
+          id: 1-2
+          attributes:
+            tryJobId: 1
+            tryNumber: 2
+            tryStartTime: 2018-09-27T08:29:32Z
+            tryEndTime: 2018-09-27T08:29:35Z
+            tryStatusCode: 0
+            tryStatusMessage: the requested operation was successfully completed
+            tryProcessId: 1234
+            trySessionId: 4567
+            tryKbps: 231.4
+            tryKbWritten: 4078.54
+            tryFilesWritten: 24
+            tryTapesToEject: 4
+            tryMediaServer: mediaServer1.domain.com
+            trySourceStorageUnit: sourceStorageUnitName
+            tryDestinationStorageUnit: destinationStorageUnitName
+            tryLog:
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: INFO
+              message: bpdbm (pid=16548) image catalog cleanup
+            - timestamp: 2018-09-27T08:29:32Z
+              severity: WARNING
+              message: "bpdbm (pid=16548) Hot catalog backup is not configured for\
+                \ 'hostname.domain.com', catalog cleanup will return partial success\
+                \ until hot catalog backup is configured."
+            - timestamp: 2018-09-27T08:29:33Z
+              message: restoring from image dummy-vm2_1538012955
+            - timestamp: 2018-09-27T08:29:35Z
+              message: restored from image dummy-vm2_1538012955
+    inline_response_200_6:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/getJobFileListResponse_data'
+      example:
+        data:
+          links:
+            self:
+              href: /admin/jobs/1/file-lists
+          type: file-lists
+          id: 1
+          attributes:
+            fileList:
+            - C:\BackupSource\MyFolder
+    adminmanualbackup_data_attributes:
+      required:
+      - policyName
+      type: object
+      properties:
+        policyName:
+          type: string
+          description: The name of the policy used to start the manual backup.
+        scheduleName:
+          type: string
+          description: The name of the schedule used to start the manual backup.
+        clientName:
+          type: string
+          description: The name of the client.
+        keyword:
+          type: string
+          description: A keyword that is added to the created image. Optional.
+        instanceName:
+          type: string
+          description: The name of the Oracle or Microsoft SQL Server instance to
+            back up.
+        databaseName:
+          type: string
+          description: The name of the Microsoft SQL Server database to back up.
+        dbUniqueName:
+          type: string
+          description: The Oracle RAC database name. The database name should be used
+            along with the dbid.
+        dbid:
+          type: string
+          description: The Oracle RAC database ID. The database ID should be used
+            along with the dbUniqueName.
+      description: The request for the manual backup.
+    adminmanualbackup_data:
+      required:
+      - attributes
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The resource type.
+          enum:
+          - backupRequest
+        attributes:
+          $ref: '#/components/schemas/adminmanualbackup_data_attributes'
+    admin_manualbackup_body:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/adminmanualbackup_data'
+    inline_response_202:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/manualBackupResponse_data'
+      example:
+        data:
+        - links:
+            file-lists: null
+            try-logs: null
+            self:
+              href: href
+          attributes:
+            scheduleName: scheduleName
+            applicationType: NONE
+            auditDomainType: 5
+            resumable: 6
+            retentionLevel: 8
+            restartable: 9
+            backupId: backupId
+            frozenImage: 2
+            destinationMediaServerName: destinationMediaServerName
+            cancellable: 7
+            currentOperation: 7
+            dataMovement: STANDARD
+            mainProcessId: 6
+            controlHost: controlHost
+            state: QUEUED
+            activeTryStartTime: 2000-01-23T04:56:07.000+00:00
+            kilobytesToTransfer: 1
+            policyName: policyName
+            robotName: robotName
+            initiatorId: initiatorId
+            jobOwner: jobOwner
+            jobGroup: jobGroup
+            priority: 9
+            destinationMediaId: destinationMediaId
+            offHostType: STANDARD
+            jobId: 0
+            numberOfFiles: 7
+            sourceMediaId: sourceMediaId
+            sourceStorageUnitName: sourceStorageUnitName
+            auditUserName: auditUserName
+            scheduleType: FULL_BACKUP
+            vaultName: vaultName
+            copyNumber: 2
+            try: 6
+            compression: 5
+            jobSubType: IMMEDIATE
+            activeProcessId: 1
+            kilobytesDataTransferred: 1
+            lastUpdateTime: 2000-01-23T04:56:07.000+00:00
+            status: 6
+            profileName: profileName
+            assetDisplayableName: assetDisplayableName
+            clientName: clientName
+            jobQueueReason: 4
+            numberOfTapeToEject: 1
+            dumpHost: dumpHost
+            kilobytesTransferred: 1
+            streamNumber: 3
+            transferRate: 2
+            restoreBackupIDs: restoreBackupIDs
+            submissionType: 6
+            suspendable: 1
+            instanceDatabaseName: instanceDatabaseName
+            destinationStorageUnitName: destinationStorageUnitName
+            currentFile: currentFile
+            startTime: 2000-01-23T04:56:07.000+00:00
+            transportType: LAN
+            jobType: BACKUP
+            dedupRatio: 9.301444
+            jobQueueResource: jobQueueResource
+            percentComplete: 5
+            sessionId: 9
+            estimatedFiles: 3
+            assetID: assetID
+            parentJobId: 4
+            sourceMediaServerName: sourceMediaServerName
+            acceleratorOptimization: 6
+            policyType: STANDARD
+            endTime: 2000-01-23T04:56:07.000+00:00
+            auditDomainName: auditDomainName
+            elapsedTime: elapsedTime
+          id: id
+          type: type
+        - links:
+            file-lists: null
+            try-logs: null
+            self:
+              href: href
+          attributes:
+            scheduleName: scheduleName
+            applicationType: NONE
+            auditDomainType: 5
+            resumable: 6
+            retentionLevel: 8
+            restartable: 9
+            backupId: backupId
+            frozenImage: 2
+            destinationMediaServerName: destinationMediaServerName
+            cancellable: 7
+            currentOperation: 7
+            dataMovement: STANDARD
+            mainProcessId: 6
+            controlHost: controlHost
+            state: QUEUED
+            activeTryStartTime: 2000-01-23T04:56:07.000+00:00
+            kilobytesToTransfer: 1
+            policyName: policyName
+            robotName: robotName
+            initiatorId: initiatorId
+            jobOwner: jobOwner
+            jobGroup: jobGroup
+            priority: 9
+            destinationMediaId: destinationMediaId
+            offHostType: STANDARD
+            jobId: 0
+            numberOfFiles: 7
+            sourceMediaId: sourceMediaId
+            sourceStorageUnitName: sourceStorageUnitName
+            auditUserName: auditUserName
+            scheduleType: FULL_BACKUP
+            vaultName: vaultName
+            copyNumber: 2
+            try: 6
+            compression: 5
+            jobSubType: IMMEDIATE
+            activeProcessId: 1
+            kilobytesDataTransferred: 1
+            lastUpdateTime: 2000-01-23T04:56:07.000+00:00
+            status: 6
+            profileName: profileName
+            assetDisplayableName: assetDisplayableName
+            clientName: clientName
+            jobQueueReason: 4
+            numberOfTapeToEject: 1
+            dumpHost: dumpHost
+            kilobytesTransferred: 1
+            streamNumber: 3
+            transferRate: 2
+            restoreBackupIDs: restoreBackupIDs
+            submissionType: 6
+            suspendable: 1
+            instanceDatabaseName: instanceDatabaseName
+            destinationStorageUnitName: destinationStorageUnitName
+            currentFile: currentFile
+            startTime: 2000-01-23T04:56:07.000+00:00
+            transportType: LAN
+            jobType: BACKUP
+            dedupRatio: 9.301444
+            jobQueueResource: jobQueueResource
+            percentComplete: 5
+            sessionId: 9
+            estimatedFiles: 3
+            assetID: assetID
+            parentJobId: 4
+            sourceMediaServerName: sourceMediaServerName
+            acceleratorOptimization: 6
+            policyType: STANDARD
+            endTime: 2000-01-23T04:56:07.000+00:00
+            auditDomainName: auditDomainName
+            elapsedTime: elapsedTime
+          id: id
+          type: type
+    inline_response_200_7:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/serviceListResponse_data'
+      example:
+        data:
+        - attributes:
+            status: RUNNING
+          id: id
+          type: service
+        - attributes:
+            status: RUNNING
+          id: id
+          type: service
+    inline_response_200_8:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/serviceListResponse_data'
+      example:
+        data:
+          attributes:
+            status: RUNNING
+          id: id
+          type: service
+    admindiscoveryworkloadsworkloadTypestart_data_attributes:
+      type: object
+      properties:
+        serverName:
+          type: string
+          description: |
+            The name of the server to perform discovery on.
+            Required for the following discovery workloads: vmware, rhv, cloud
+        discoveryHost:
+          type: string
+          description: |
+            The NetBackup host to perform the discovery.
+            Optional for the following workloads: vmware, rhv
+      description: The attributes of the discovery request.
+    admindiscoveryworkloadsworkloadTypestart_data:
+      required:
+      - attributes
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The resource type.
+          enum:
+          - discoveryRequest
+        attributes:
+          $ref: '#/components/schemas/admindiscoveryworkloadsworkloadTypestart_data_attributes'
+      description: Contains the discovery request data.
+    workloadType_start_body:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/admindiscoveryworkloadsworkloadTypestart_data'
+      description: The discovery request schema.
+    inline_response_202_1:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/discoveryResponse_data'
+      description: The discovery API response schema.
+      example:
+        data:
+          attributes:
+            discoveryHost: discoveryHost
+            serverName: serverName
+          id: id
+          type: vmwareDiscovery
+    inline_response_200_9:
+      required:
+      - data
+      type: object
+      properties:
+        links:
+          $ref: '#/components/schemas/getJobsResponse_links'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/discoveryStatusPage_data'
+        meta:
+          $ref: '#/components/schemas/getJobsResponse_meta'
+      description: The discovery status response schema.
+      example:
+        data:
+        - type: discovery-status
+          id: some.server.com
+          attributes:
+            workloadType: VMware
+            discoveryStatus: SUCCESS
+            discoveryStartTime: 2019-02-21T00:48:21.874Z
+            discoveryFinishTime: 2019-02-21T00:48:28.413Z
+            updatedAt: 2019-02-21T00:48:28.416Z
+            additionalAttributes:
+              discoveryHost: 10.80.97.207
+              discoveryFrequencySeconds: 301
+              isDiscoveryDisabled: false
+        meta:
+          pagination:
+            pages: 1
+            last: 0
+            offset: 0
+            limit: 10
+            count: 1
+            page: 0
+            first: 0
+        links:
+          self:
+            href: "https://some.server.com:1556/netbackup/admin/discovery/workloads/vmware/status?page[offset]=0&page[limit]=10&filter=contains(serverName,'com')"
+          last:
+            href: "https://some.server.com:1556/netbackup/admin/discovery/workloads/vmware/status?page[offset]=0&page[limit]=10&filter=contains(serverName,'com')"
+          first:
+            href: "https://some.server.com:1556/netbackup/admin/discovery/workloads/vmware/status?page[offset]=0&page[limit]=10&filter=contains(serverName,'com')"
+    processListResponse_attributes:
+      required:
+      - elapsedTime
+      - memoryUsageMB
+      - priority
+      - processName
+      - startTime
+      type: object
+      properties:
+        processName:
+          type: string
+          description: The name of the process.
+        ppid:
+          type: integer
+          description: The process ID of the parent process.
+        priority:
+          type: integer
+          description: The priority of the process.
+        memoryUsageMB:
+          type: number
+          description: The memory usage of the process in MB.
+        startTime:
+          type: string
+          description: The time the process started in ISO 8601 time format.
+          format: date-time
+        elapsedTime:
+          type: string
+          description: "The duration of the process since startTime, in ISO 8601 time\
+            \ format."
+        username:
+          type: string
+          description: The username that started the process.
+        arguments:
+          type: string
+          description: The arguments provided to the process.
+      example:
+        memoryUsageMB: 1.4658129805029452
+        processName: processName
+        startTime: 2000-01-23T04:56:07.000+00:00
+        arguments: arguments
+        priority: 6
+        ppid: 0
+        elapsedTime: elapsedTime
+        username: username
+    processListResponse_data:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: Resource type.
+          enum:
+          - process
+        id:
+          type: string
+          description: The process ID (PID) of the process.
+        attributes:
+          $ref: '#/components/schemas/processListResponse_attributes'
+      example:
+        attributes:
+          memoryUsageMB: 1.4658129805029452
+          processName: processName
+          startTime: 2000-01-23T04:56:07.000+00:00
+          arguments: arguments
+          priority: 6
+          ppid: 0
+          elapsedTime: elapsedTime
+          username: username
+        id: id
+        type: process
+    manualBackupResponse_links_self:
+      type: object
+      properties:
+        href:
+          type: string
+      example:
+        href: href
+    manualBackupResponse_links:
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        try-logs:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        file-lists:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+      example:
+        file-lists: null
+        try-logs: null
+        self:
+          href: href
+    manualBackupResponse_attributes:
+      type: object
+      properties:
+        jobId:
+          type: integer
+          description: The job identifier.
+        acceleratorOptimization:
+          type: integer
+          description: The percentage of optimization achieved if the job uses NetBackup
+            Accelerator.
+        activeProcessId:
+          type: integer
+          description: The identifier of the active process.
+        activeTryStartTime:
+          type: string
+          description: A UTC timestamp of when the current try started.
+          format: date-time
+        applicationType:
+          type: string
+          description: The application type.
+          enum:
+          - NONE
+          - VMWARE
+          - HYPERV
+          - VXVI
+          - HYPERSCALE
+          - RHV
+        auditDomainName:
+          type: string
+          description: The domain name for auditing.
+        auditDomainType:
+          type: integer
+          description: |
+            The auditing domain type.
+              0=INVALID,
+              1=ACTIVE_DIRECTORY,
+              2=NIS_PLUS,
+              3=VXAT_PRIVATE,
+              4=UNIX_PASSWORD,
+              5=NIS,
+              6=LOCAL_HOST,
+              7=UNKNOWN_AUTH
+        auditUserName:
+          type: string
+          description: The user name in the audit record.
+        assetID:
+          type: string
+          description: The GUID of the asset for which the job was started.
+        assetDisplayableName:
+          type: string
+          description: The displayable name of the asset for which the job was started.
+        backupId:
+          type: string
+          description: The backup ID or image ID.
+        clientName:
+          type: string
+          description: The name of the client to protect.
+        compression:
+          type: integer
+          description: |
+            Indicates if compression is enabled for the backup policy.
+              0=disabled,
+              1=enabled
+        controlHost:
+          type: string
+          description: The host from which the job was initiated.
+        copyNumber:
+          type: integer
+          description: The copy number of the backup image.
+        currentFile:
+          type: string
+          description: The file currently being protected.
+        currentOperation:
+          type: integer
+          description: |
+            The operation currently being performed. A value of -99 indicates that an invalid value was returned.
+              0=MOUNTING,
+              1=POSITIONING,
+              2=CONNECTING,
+              3=WRITING,
+              4=VLT_INIT,
+              5=VLT_DUPIMG,
+              6=VLT_DUPCMP,
+              7=VLT_BK_NBCAT,
+              8=VLT_EJRPT,
+              9=VLT_COMPLETE,
+              10=READING,
+              11=DUPLICATE,
+              12=IMPORT,
+              13=VERIFY,
+              14=RESTORE,
+              15=BACKUPDB,
+              16=VAULT,
+              17=LABEL,
+              18=ERASE,
+              19=SYNTH_DBQUERY,
+              20=SYNTH_PROCESS_EXTENTS,
+              21=SYNTH_PLAN,
+              22=CREATE_SNAPSHOT,
+              23=DELETE_SNAPSHOT,
+              24=RECOVERDB,
+              25=MCONTENTS,
+              26=SYNTH_REQUERESOURCES,
+              27=PARENT_JOB,
+              28=INDEXING,
+              29=REPLICATE,
+              30=RUNNING,
+              31=ASSEMBLING_FILE_LIST,
+              32=ALLOCATING_MEDIA
+          format: int64
+        dataMovement:
+          type: string
+          description: The type of data movement used for this job.
+          enum:
+          - STANDARD
+          - INSTANTRECOVERYDISK
+          - INSTANTRECOVERYDISKANDTAPE
+          - SYNTHETIC
+          - DISKSTAGING
+          - SNAPSHOT
+        dedupRatio:
+          type: number
+          description: The deduplication rate that was achieved.
+          format: float
+        destinationMediaId:
+          type: string
+          description: The destination media server. Used for deduplication jobs.
+        destinationStorageUnitName:
+          type: string
+          description: The destination storage unit. Used for deduplication jobs.
+        destinationMediaServerName:
+          type: string
+          description: The destination media server name. Used for deduplication jobs.
+        dumpHost:
+          type: string
+          description: The recovery appliance host name for Copilot.
+        elapsedTime:
+          type: string
+          description: The time that has elapsed since the start of the job.
+        endTime:
+          type: string
+          description: The time that the job ended.
+          format: date-time
+        estimatedFiles:
+          type: integer
+          description: The estimated number of files to protect.
+        frozenImage:
+          type: integer
+          description: Indicates if the job type is a snapshot. This property is used
+            internally.
+        initiatorId:
+          type: string
+          description: The initiator of the job.
+        instanceDatabaseName:
+          type: string
+          description: The name of the database instance or the database.
+        jobGroup:
+          type: string
+          description: The name of the group that initiated the job.
+        jobOwner:
+          type: string
+          description: The job owner or the user that initiated the job.
+        jobQueueReason:
+          type: integer
+          description: |
+            The reason the job is queued. A value of -99 indicates that an invalid value was returned.
+              1=MEDIA_IN_USE,
+              2=DRIVES_IN_USE,
+              3=MEDIA_SERVER_OFFLINE,
+              4=ROBOT_DOWN,
+              5=MAX_STORAGE_UNIT_JOBS,
+              6=MEDIA_REQUEST_DELAY,
+              7=LOCAL_DRIVES_DOWN,
+              8=MEDIA_IN_DRIVE_IN_USE,
+              9=PHYSICAL_DRIVE_UNAVAILABLE,
+              10=CLEANING_MEDIA_UNAVAILABLE,
+              11=DRIVE_SCAN_HOST_OFFLINE,
+              12=DISK_MEDIA_SERVER_OFFLINE,
+              13=NO_MASTER_MEDIA_CONNECTIVITY,
+              14=MEDIA_SERVER_NON_ACTIVE_MODE,
+              15=STORAGEUNIT_JOB_COUNTS_THROTTLED,
+              16=JOB_HISTORY_DRIVES_IN_USE,
+              17=DISK_VOLUME_UNAVAILABLE,
+              18=MAX_CONCURRENT_VOLUME_READERS,
+              19=DISK_GROUP_UNAVAILABLE,
+              20=FAT_PIPE_IN_USE,
+              21=DISK_VOLUME_UNMOUNTING,
+              22=DISK_VOLUME_IN_USE,
+              23=MAX_PARTIAL_MEDIA,
+              24=LOGICAL_RESOURCE,
+              25=DRIVES_IN_STORAGE_UNIT_IN_USE,
+              26=STOP_DRIVE_SCAN,
+              27=DISK_VOLUME_MOUNTING,
+              28=MOUNT_FILE_EXISTS,
+              29=PENDING_ACTION,
+              30=DISK_VOLUME_STREAM_LIMIT
+          format: int64
+        jobQueueResource:
+          type: string
+          description: The name of the resource for which the queued job is waiting.
+        jobSubType:
+          type: string
+          description: The job subtype.
+          enum:
+          - IMMEDIATE
+          - SCHEDULED
+          - USERBACKUP
+          - ERASETYPE_QUICK
+          - ERASETYPE_LONG
+          - DBBACKUP_STAGING
+          - DBBACKUP_COLD
+          - RMAN_CATALOG
+          - IA_CREATE_VM
+          - IA_DELETE_VM
+          - IA_CREATE_MOUNT
+          - IA_DELETE_MOUNT
+          - IA_FILE_RESTORE
+          - IA_GET_DOWNLOAD_URL
+          - AGENTLESS_RESTORE
+          - FULL_VM_RESTORE
+          - CLOUD_VM_CONVERT
+          - IA_ATTACH_DATABASE
+          - IA_DETACH_DATABASE
+        jobType:
+          type: string
+          description: The job type.
+          enum:
+          - BACKUP
+          - ARCHIVE
+          - RESTORE
+          - VERIFY
+          - DUPLICATE
+          - IMPORT
+          - DBBACKUP
+          - VAULT
+          - LABEL
+          - ERASE
+          - TPREQ
+          - TPCLEAN
+          - TPFORMAT
+          - VMPHYSINV
+          - DQTS
+          - DBRECOVER
+          - MCONTENTS
+          - IMAGEDELETE
+          - GENERIC
+          - REPLICATE
+          - REPLICA_IMPORT
+          - SNAPDUPE
+          - SNAPREPLICATE
+          - SNAPIMPORT
+          - APP_STATE_CAPTURE
+          - INDEXING
+          - INDEXCLEANUP
+          - SNAPSHOT
+          - SNAPINDEX
+          - ACTIVATE_IR
+          - DEACTIVATE_IR
+          - REACTIVATE_IR
+          - STOP_IR
+          - INSTANT_RECOVERY
+          - RMAN_CATALOG
+          - LOCKVM
+          - INSTANT_ACCESS
+          - CLOUD_SNAPSHOT_REPLICATE
+        cancellable:
+          type: integer
+          description: Indicates if the job can be stopped.
+        kilobytesDataTransferred:
+          type: integer
+          description: |
+            The actual data transferred, in kilobytes. For some jobs, data transferred is different than the final image size.
+        kilobytesToTransfer:
+          type: integer
+          description: The remaining kilobytes to transfer.
+        kilobytesTransferred:
+          type: integer
+          description: "The estimated amount of data transferred, in kilobytes."
+        lastUpdateTime:
+          type: string
+          description: The UTC timestamp when the job was modified.
+          format: date-time
+        mainProcessId:
+          type: integer
+          description: The process ID of the main controlling process for restore
+            and image cleanup.
+        numberOfFiles:
+          type: integer
+          description: The actual number of files protected.
+        numberOfTapeToEject:
+          type: integer
+          description: "For Vault jobs, the total number of tape media to eject."
+        offHostType:
+          type: string
+          description: The Offhost type.
+          enum:
+          - STANDARD
+          - ATLCLIENT
+          - TPC
+          - MEDIASERVER
+          - NAS
+          - NDMP
+          - UNRECOGNIZED_VALUE
+        parentJobId:
+          type: integer
+          description: The parent job ID.
+        percentComplete:
+          type: integer
+          description: The estimate (as a percentage) of when the job will be completed.
+        policyName:
+          type: string
+          description: The name of the policy used by this job.
+        policyType:
+          type: string
+          description: The backup policy type.
+          enum:
+          - STANDARD
+          - PROXY
+          - NONSTANDARD
+          - APOLLO_WBAK
+          - OBACKUP
+          - ANY
+          - INFORMIX
+          - SYBASE
+          - SHAREPOINT
+          - WINDOWS
+          - NETWARE
+          - BACKTRACK
+          - AUSPEX_FASTBACK
+          - WINDOWS_NT
+          - OS2
+          - SQL_SERVER
+          - EXCHANGE
+          - SAP
+          - DB2
+          - NDMP
+          - FLASHBACKUP
+          - SPLITMIRROR
+          - AFS
+          - DFS
+          - DATASTORE
+          - LOTUS_NOTES
+          - NCR_TERADATA
+          - VAX_VMS
+          - HP3000_MPE
+          - FBU_WINDOWS
+          - VAULT
+          - BE_SQL_SERVER
+          - BE_EXCHANGE
+          - MAC
+          - DS
+          - NBU_CATALOG
+          - GENERIC
+          - CMS_DB
+          - PUREDISK_EXPORT
+          - ENTERPRISE_VAULT
+          - VMWARE
+          - HYPERV
+          - NBU_SEARCHSERVER
+          - HYPERSCALE
+          - BIGDATA
+          - CLOUD
+          - DEPLOYMENT
+          - HYPERVISOR
+          - UNIVERSAL_SHARE
+          - NAS_DATA_PROTECTION
+        priority:
+          type: integer
+          description: The priority of this job.
+        profileName:
+          type: string
+          description: The name of the Vault profile.
+        restartable:
+          type: integer
+          description: Indicates if the job can be restarted.
+        restoreBackupIDs:
+          type: string
+          description: The list of backup IDs needed for the restore job.
+        resumable:
+          type: integer
+          description: Indicates if the job can be resumed.
+        retentionLevel:
+          type: integer
+          description: The retention level of the backup image.
+        robotName:
+          type: string
+          description: The name of the robot in the Vault job.
+        scheduleName:
+          type: string
+          description: The name of the backup schedule used by the backup job.
+        scheduleType:
+          type: string
+          description: The type of schedule used by the backup job.
+          enum:
+          - FULL_BACKUP
+          - DIFFERENTIAL_INCREMENTAL_BACKUP
+          - USER_BACKUP
+          - USER_ARCHIVE
+          - CUMULATIVE_INCREMENTAL_BACKUP
+          - VAULT_CATALOG_BACKUP
+          - AUTOMATIC_BACKUP
+          - APPLICATION_BACKUP
+          - AUTOMATIC_FULL_BACKUP
+          - AUTOMATIC_INCREMENTAL_BACKUP
+          - AUTOMATIC_DIFFERENTIAL_INCREMENTAL_BACKUP
+          - AUTOMATIC_CUMULATIVE_INCREMENTAL_BACKUP
+          - AUTOMATIC_VAULT
+          - ARCHIVE_REDO_LOG_BACKUP
+          - TRANSACTION_LOG_BACKUP
+          - PRE_CHECK
+          - STAGE_PACKAGE
+          - INSTALL_PACKAGE
+          - UNUSED
+          - UNRECOGNIZED_VALUE
+        sessionId:
+          type: integer
+          description: The Vault session ID.
+        sourceMediaId:
+          type: string
+          description: The source media ID for the duplication job.
+        sourceMediaServerName:
+          type: string
+          description: The name of the source media server for the duplication job.
+        sourceStorageUnitName:
+          type: string
+          description: The name of the source storage unit.
+        startTime:
+          type: string
+          description: The UTC timestamp when the job was started.
+          format: date-time
+        state:
+          type: string
+          description: The current state of the job.
+          enum:
+          - QUEUED
+          - ACTIVE
+          - REQUEUED
+          - DONE
+          - SUSPENDED
+          - INCOMPLETE
+        status:
+          type: integer
+          description: The final job status code.
+        streamNumber:
+          type: integer
+          description: The stream number of the job.
+        submissionType:
+          type: integer
+          description: The job submission type.
+        suspendable:
+          type: integer
+          description: Indicates if the job can be suspended.
+        transferRate:
+          type: integer
+          description: The data transfer rate in kilobytes (KB) per second.
+        transportType:
+          type: string
+          description: The data transport type used for the job.
+          enum:
+          - LAN
+          - FAT
+          - UNKNOWN_TYPE
+        try:
+          type: integer
+          description: The current try number to execute this job.
+        vaultName:
+          type: string
+          description: The Vault name used by the job.
+      example:
+        scheduleName: scheduleName
+        applicationType: NONE
+        auditDomainType: 5
+        resumable: 6
+        retentionLevel: 8
+        restartable: 9
+        backupId: backupId
+        frozenImage: 2
+        destinationMediaServerName: destinationMediaServerName
+        cancellable: 7
+        currentOperation: 7
+        dataMovement: STANDARD
+        mainProcessId: 6
+        controlHost: controlHost
+        state: QUEUED
+        activeTryStartTime: 2000-01-23T04:56:07.000+00:00
+        kilobytesToTransfer: 1
+        policyName: policyName
+        robotName: robotName
+        initiatorId: initiatorId
+        jobOwner: jobOwner
+        jobGroup: jobGroup
+        priority: 9
+        destinationMediaId: destinationMediaId
+        offHostType: STANDARD
+        jobId: 0
+        numberOfFiles: 7
+        sourceMediaId: sourceMediaId
+        sourceStorageUnitName: sourceStorageUnitName
+        auditUserName: auditUserName
+        scheduleType: FULL_BACKUP
+        vaultName: vaultName
+        copyNumber: 2
+        try: 6
+        compression: 5
+        jobSubType: IMMEDIATE
+        activeProcessId: 1
+        kilobytesDataTransferred: 1
+        lastUpdateTime: 2000-01-23T04:56:07.000+00:00
+        status: 6
+        profileName: profileName
+        assetDisplayableName: assetDisplayableName
+        clientName: clientName
+        jobQueueReason: 4
+        numberOfTapeToEject: 1
+        dumpHost: dumpHost
+        kilobytesTransferred: 1
+        streamNumber: 3
+        transferRate: 2
+        restoreBackupIDs: restoreBackupIDs
+        submissionType: 6
+        suspendable: 1
+        instanceDatabaseName: instanceDatabaseName
+        destinationStorageUnitName: destinationStorageUnitName
+        currentFile: currentFile
+        startTime: 2000-01-23T04:56:07.000+00:00
+        transportType: LAN
+        jobType: BACKUP
+        dedupRatio: 9.301444
+        jobQueueResource: jobQueueResource
+        percentComplete: 5
+        sessionId: 9
+        estimatedFiles: 3
+        assetID: assetID
+        parentJobId: 4
+        sourceMediaServerName: sourceMediaServerName
+        acceleratorOptimization: 6
+        policyType: STANDARD
+        endTime: 2000-01-23T04:56:07.000+00:00
+        auditDomainName: auditDomainName
+        elapsedTime: elapsedTime
+    manualBackupResponse_data:
+      type: object
+      properties:
+        type:
+          type: string
+        id:
+          type: string
+        links:
+          $ref: '#/components/schemas/manualBackupResponse_links'
+        attributes:
+          $ref: '#/components/schemas/manualBackupResponse_attributes'
+      example:
+        links:
+          file-lists: null
+          try-logs: null
+          self:
+            href: href
+        attributes:
+          scheduleName: scheduleName
+          applicationType: NONE
+          auditDomainType: 5
+          resumable: 6
+          retentionLevel: 8
+          restartable: 9
+          backupId: backupId
+          frozenImage: 2
+          destinationMediaServerName: destinationMediaServerName
+          cancellable: 7
+          currentOperation: 7
+          dataMovement: STANDARD
+          mainProcessId: 6
+          controlHost: controlHost
+          state: QUEUED
+          activeTryStartTime: 2000-01-23T04:56:07.000+00:00
+          kilobytesToTransfer: 1
+          policyName: policyName
+          robotName: robotName
+          initiatorId: initiatorId
+          jobOwner: jobOwner
+          jobGroup: jobGroup
+          priority: 9
+          destinationMediaId: destinationMediaId
+          offHostType: STANDARD
+          jobId: 0
+          numberOfFiles: 7
+          sourceMediaId: sourceMediaId
+          sourceStorageUnitName: sourceStorageUnitName
+          auditUserName: auditUserName
+          scheduleType: FULL_BACKUP
+          vaultName: vaultName
+          copyNumber: 2
+          try: 6
+          compression: 5
+          jobSubType: IMMEDIATE
+          activeProcessId: 1
+          kilobytesDataTransferred: 1
+          lastUpdateTime: 2000-01-23T04:56:07.000+00:00
+          status: 6
+          profileName: profileName
+          assetDisplayableName: assetDisplayableName
+          clientName: clientName
+          jobQueueReason: 4
+          numberOfTapeToEject: 1
+          dumpHost: dumpHost
+          kilobytesTransferred: 1
+          streamNumber: 3
+          transferRate: 2
+          restoreBackupIDs: restoreBackupIDs
+          submissionType: 6
+          suspendable: 1
+          instanceDatabaseName: instanceDatabaseName
+          destinationStorageUnitName: destinationStorageUnitName
+          currentFile: currentFile
+          startTime: 2000-01-23T04:56:07.000+00:00
+          transportType: LAN
+          jobType: BACKUP
+          dedupRatio: 9.301444
+          jobQueueResource: jobQueueResource
+          percentComplete: 5
+          sessionId: 9
+          estimatedFiles: 3
+          assetID: assetID
+          parentJobId: 4
+          sourceMediaServerName: sourceMediaServerName
+          acceleratorOptimization: 6
+          policyType: STANDARD
+          endTime: 2000-01-23T04:56:07.000+00:00
+          auditDomainName: auditDomainName
+          elapsedTime: elapsedTime
+        id: id
+        type: type
+    getJobsResponse_links:
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        next:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        prev:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        first:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        last:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+    getJobsResponse_meta_pagination:
+      type: object
+      properties:
+        prev:
+          type: integer
+        next:
+          type: integer
+        first:
+          type: integer
+        last:
+          type: integer
+        count:
+          type: integer
+        page:
+          type: integer
+        offset:
+          type: integer
+        pages:
+          type: integer
+        limit:
+          type: integer
+    getJobsResponse_meta:
+      type: object
+      properties:
+        pagination:
+          $ref: '#/components/schemas/getJobsResponse_meta_pagination'
+    getJobProgressLogsResponse_attributes:
+      required:
+      - message
+      type: object
+      properties:
+        message:
+          type: string
+          description: The log message.
+      example:
+        message: message
+    getJobProgressLogsResponse_data:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        id:
+          type: integer
+          description: The offset of the log message.
+        type:
+          type: string
+          enum:
+          - getJobProgressEntryResponse
+        attributes:
+          $ref: '#/components/schemas/getJobProgressLogsResponse_attributes'
+      example:
+        attributes:
+          message: message
+        id: 0
+        type: getJobProgressEntryResponse
+    getJobProgressLogsResponse_meta_pagination:
+      type: object
+      properties:
+        prev:
+          type: integer
+        next:
+          type: integer
+        first:
+          type: integer
+        last:
+          type: integer
+        count:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+      example:
+        next: 1
+        last: 5
+        offset: 7
+        prev: 6
+        count: 2
+        limit: 9
+        first: 5
+    getJobProgressLogsResponse_meta:
+      required:
+      - pagination
+      type: object
+      properties:
+        pagination:
+          $ref: '#/components/schemas/getJobProgressLogsResponse_meta_pagination'
+      example:
+        pagination:
+          next: 1
+          last: 5
+          offset: 7
+          prev: 6
+          count: 2
+          limit: 9
+          first: 5
+    getJobTryLogsResponse_links:
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        prev:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        next:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        first:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+        last:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+    getJobTryLogsResponse_attributes_tryLog:
+      required:
+      - message
+      type: object
+      properties:
+        timestamp:
+          type: string
+          description: The UTC timestamp of the log entry.
+        severity:
+          type: string
+          description: The severity of the log message.
+          enum:
+          - UNKNOWN
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+          - CRITICAL
+        message:
+          type: string
+          description: The localized log message.
+    getJobTryLogsResponse_attributes:
+      required:
+      - tryEndTime
+      - tryJobId
+      - tryLog
+      - tryNumber
+      - tryStartTime
+      - tryStatusCode
+      - tryStatusMessage
+      type: object
+      properties:
+        tryJobId:
+          type: integer
+          description: The job ID for this try attempt.
+        tryNumber:
+          type: integer
+          description: The try attempt number for which the following logs were generated.
+        tryStartTime:
+          type: string
+          description: The UTC timestamp of when this try started.
+          format: date-time
+        tryEndTime:
+          type: string
+          description: The UTC timestamp of when this try finished.
+          format: date-time
+        tryStatusCode:
+          type: integer
+          description: The status code associated with this try attempt.
+        tryStatusMessage:
+          type: string
+          description: The status message associated with the status of this try attempt.
+        tryProcessId:
+          type: integer
+          description: The process ID for this try attempt.
+        tryKbps:
+          type: number
+          description: The rate of data transfer for this try attempt.
+        tryKbWritten:
+          type: number
+          description: The total data transferred (in KB) for this try attempt.
+        tryFilesWritten:
+          type: integer
+          description: The files written in this try attempt.
+        tryMediaServer:
+          type: string
+          description: The media server that was used for this try attempt.
+        trySourceStorageUnit:
+          type: string
+          description: The source storage unit for this try attempt.
+        tryDestinationStorageUnit:
+          type: string
+          description: The destination storage unit for this try attempt.
+        trySessionId:
+          type: integer
+          description: The session ID for this try attempt.
+        tryTapesToEject:
+          type: integer
+          description: The number of tapes to eject for this try attempt.
+        tryTransportMode:
+          type: string
+          description: The transport mode that was used for this try attempt.
+          enum:
+          - FIBRE_TRANSPORT
+          - LAN
+        tryLog:
+          type: array
+          description: "The list of try-logs, parsed as JSON objects and sorted."
+          items:
+            $ref: '#/components/schemas/getJobTryLogsResponse_attributes_tryLog'
+    getJobTryLogsResponse_data:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - parsedTryLogResponse
+        id:
+          type: string
+        links:
+          $ref: '#/components/schemas/getJobTryLogsResponse_links'
+        attributes:
+          $ref: '#/components/schemas/getJobTryLogsResponse_attributes'
+    getJobFileListResponse_data_links:
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/manualBackupResponse_links_self'
+    getJobFileListResponse_data_attributes:
+      type: object
+      properties:
+        fileList:
+          type: array
+          items:
+            type: string
+    getJobFileListResponse_data:
+      type: object
+      properties:
+        type:
+          type: string
+        id:
+          type: integer
+        links:
+          $ref: '#/components/schemas/getJobFileListResponse_data_links'
+        attributes:
+          $ref: '#/components/schemas/getJobFileListResponse_data_attributes'
+    jobPostRequest_data_attributes_jobData:
+      required:
+      - jobSubType
+      - jobType
+      type: object
+      properties:
+        jobType:
+          type: string
+          description: The job type.
+          enum:
+          - INSTANT_ACCESS
+        jobSubType:
+          type: string
+          description: The job subtype.
+          enum:
+          - IA_CREATE_VM
+          - IA_DELETE_VM
+          - IA_CREATE_MOUNT
+          - IA_DELETE_MOUNT
+          - IA_FILE_RESTORE
+          - IA_GET_DOWNLOAD_URL
+          - IA_ATTACH_DATABASE
+          - IA_DETACH_DATABASE
+        policyType:
+          type: string
+          description: The type of backup policy that is associated with the job.
+          enum:
+          - MS-SQL-SERVER
+          - VMWARE
+        jobGroup:
+          type: string
+          description: The name of the group that initiated the job.
+        jobOwner:
+          type: string
+          description: The job owner or the user that initiated the job.
+        auditUserName:
+          type: string
+          description: The user name in the audit record.
+        auditDomainName:
+          type: string
+          description: The domain name in the audit record.
+        auditDomainType:
+          type: integer
+          description: The domain type in the audit record.
+        restartable:
+          type: boolean
+          description: Indicates if the job can be restarted.
+          default: false
+        cancellable:
+          type: boolean
+          description: Indicates if the job can be stopped.
+          default: false
+        resumable:
+          type: boolean
+          description: Indicates if the job can be resumed.
+          default: false
+        suspendable:
+          type: boolean
+          description: Indicates if the job can be suspended.
+          default: false
+        controlHost:
+          type: string
+          description: The host from which the job was initiated.
+        sourceMediaServerName:
+          type: string
+          description: The name of the source media server.
+        destinationMediaServerName:
+          type: string
+          description: The name of the destination media server.
+    jobPostRequest_data_attributes_jobUpdateData_tryLogList_data:
+      required:
+      - message
+      - pid
+      - program
+      - severity
+      - timestamp
+      type: object
+      properties:
+        timestamp:
+          type: string
+          description: The UTC timestamp of when the try log entry was created.
+          format: date-time
+        severity:
+          type: string
+          description: The severity of the log message.
+          enum:
+          - UNKNOWN
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+          - CRITICAL
+        program:
+          type: string
+          description: The name of the process or program.
+        pid:
+          type: integer
+          description: The process ID.
+        message:
+          type: string
+          description: The log message.
+      description: The try log entry for the type 'LOG'.
+    jobPostRequest_data_attributes_jobUpdateData_tryLogList:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/jobPostRequest_data_attributes_jobUpdateData_tryLogList_data'
+    jobPostRequest_data_attributes_jobUpdateData:
+      type: object
+      properties:
+        restoreBackupIDs:
+          type: array
+          description: The identifier for the backup image that was used for the restore.
+          items:
+            type: string
+        startTime:
+          type: string
+          description: The UTC timestamp for when the job was started.
+          format: date-time
+        endTime:
+          type: string
+          description: The UTC timestamp for when the job ended.
+          format: date-time
+        activeTryStartTime:
+          type: string
+          description: A UTC timestamp for when the current try started.
+        lastUpdateTime:
+          type: string
+          description: The UTC timestamp for when the job was modified.
+          format: date-time
+        state:
+          type: string
+          description: The current state of the job.
+          enum:
+          - QUEUED
+          - ACTIVE
+          - REQUEUED
+          - DONE
+          - SUSPENDED
+          - INCOMPLETE
+        status:
+          type: integer
+          description: The final job status code.
+        newTry:
+          type: boolean
+          description: Indicates if a new try log should be started.
+          default: false
+        endTry:
+          type: boolean
+          description: Indicates if the current try log should end.
+          default: false
+        startTrack:
+          type: boolean
+          description: If set to true bpjobd will track the job.
+          default: true
+        stopTrack:
+          type: boolean
+          description: Indicates if bpjobd will stop tracking the job.
+          default: false
+        done:
+          type: boolean
+          description: Indicates if bpjobd will track the job.
+          default: false
+        tryLogList:
+          $ref: '#/components/schemas/jobPostRequest_data_attributes_jobUpdateData_tryLogList'
+        fileList:
+          type: array
+          items:
+            type: string
+    jobPostRequest_data_attributes:
+      required:
+      - jobData
+      type: object
+      properties:
+        jobData:
+          $ref: '#/components/schemas/jobPostRequest_data_attributes_jobData'
+        jobUpdateData:
+          $ref: '#/components/schemas/jobPostRequest_data_attributes_jobUpdateData'
+    jobPostRequest_data:
+      required:
+      - attributes
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The resource type.
+          enum:
+          - jobRequest
+        attributes:
+          $ref: '#/components/schemas/jobPostRequest_data_attributes'
+    jobPatchRequest_data_attributes:
+      required:
+      - jobUpdateData
+      type: object
+      properties:
+        jobUpdateData:
+          $ref: '#/components/schemas/jobPostRequest_data_attributes_jobUpdateData'
+    jobPatchRequest_data:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The resource type.
+          enum:
+          - jobRequest
+        id:
+          type: string
+          description: The job identifier.
+        attributes:
+          $ref: '#/components/schemas/jobPatchRequest_data_attributes'
+    serviceListResponse_attributes:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          description: The current status of the service.
+          enum:
+          - RUNNING
+          - STOPPED
+      example:
+        status: RUNNING
+    serviceListResponse_data:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The resource type.
+          enum:
+          - service
+        id:
+          type: string
+          description: The name of the service (daemon).
+        attributes:
+          $ref: '#/components/schemas/serviceListResponse_attributes'
+      example:
+        attributes:
+          status: RUNNING
+        id: id
+        type: service
+    discoveryStatusPage_attributes_additionalAttributes:
+      type: object
+      properties:
+        discoveryHost:
+          type: string
+          description: |
+            The NetBackup host used to perform the discovery.
+            Applies to the following workloadTypes types: [VMware, RHV]
+        discoveryFrequencySeconds:
+          type: integer
+          description: |
+            The frequency (in seconds) at which automatic discovery is performed.
+            Applies to the following workloadTypes types: [VMware, RHV, CLOUD]
+        isDiscoveryDisabled:
+          type: boolean
+          description: |
+            Indicates if automatic discovery is disabled.
+            Applies to the following workloadTypes types: [VMware, RHV, CLOUD]
+      description: The attributes specific to the workload.
+    discoveryStatusPage_attributes:
+      required:
+      - discoveryFinishTime
+      - discoveryStartTime
+      - discoveryStatus
+      - serverName
+      - updateTime
+      - workloadSubType
+      - workloadType
+      properties:
+        serverName:
+          type: string
+          description: The name of the server.
+        workloadType:
+          type: string
+          enum:
+          - VMware
+          - RHV
+          - CLOUD
+        workloadSubType:
+          type: string
+          description: The subtype as defined by the workload.
+        discoveryStatus:
+          type: string
+          description: The status of the discovery process.
+          enum:
+          - RUNNING
+          - SUCCESS
+          - FAILED
+          - UNKNOWN
+        discoveryStartTime:
+          type: string
+          description: The UTC timestamp of when the last attempted discovery started.
+          format: date-time
+        discoveryFinishTime:
+          type: string
+          description: The UTC timestamp of when the last attempted discovery finished.
+          format: date-time
+        updateTime:
+          type: string
+          description: The UTC timestamp of when the entry was updated.
+          format: date-time
+        additionalAttributes:
+          $ref: '#/components/schemas/discoveryStatusPage_attributes_additionalAttributes'
+    discoveryStatusPage_data:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+        id:
+          type: string
+        attributes:
+          $ref: '#/components/schemas/discoveryStatusPage_attributes'
+    discoveryResponse_data_attributes:
+      type: object
+      properties:
+        serverName:
+          type: string
+          description: |
+            The name of the server for which the discovery request was submitted.
+            Applies to the following response types: [vmwareDiscovery, rhvDiscovery, cloudDiscovery]
+        discoveryHost:
+          type: string
+          description: |
+            The NetBackup host used to perform the discovery.
+            Applies to the following response types: [vmwareDiscovery, rhvDiscovery]
+      example:
+        discoveryHost: discoveryHost
+        serverName: serverName
+    discoveryResponse_data:
+      required:
+      - attributes
+      - id
+      - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The response type that is associated with discovery request.
+          enum:
+          - vmwareDiscovery
+          - rhvDiscovery
+          - cloudDiscovery
+        id:
+          type: string
+          description: The unique identifier of the discovery request.
+        attributes:
+          $ref: '#/components/schemas/discoveryResponse_data_attributes'
+      example:
+        attributes:
+          discoveryHost: discoveryHost
+          serverName: serverName
+        id: id
+        type: vmwareDiscovery
+  parameters:
+    hostId:
+      name: hostId
+      in: path
+      description: The unique ID (UUID) of the host. See the 'uuid' attribute of the
+        response of GET /config/hosts API.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+    serviceName:
+      name: serviceName
+      in: path
+      description: The service (daemon) name.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+    workloadType:
+      name: workloadType
+      in: path
+      description: The workload type.
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+        enum:
+        - vmware
+        - rhv
+        - cloud
+  securitySchemes:
+    rbacSecurity:
+      type: apiKey
+      description: The JSON Web Token (JWT) or API key.
+      name: Authorization
+      in: header
