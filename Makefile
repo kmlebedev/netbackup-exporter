@@ -1,3 +1,9 @@
+build:
+	CGO_ENABLED=0 go build -ldflags "-extldflags -static"
+
+dev:
+	docker build --no-cache -t registry.tochka-tech.com/devexp/oci/netbackup-exporter:dev -f Dockerfile .
+
 codegen: NBU_VERSION = 8.3
 codegen: NBU_API = admin
 codegen:

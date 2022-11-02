@@ -2,15 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"github.com/antihax/optional"
-	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	glog "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	swagger "gitlab.tochka-tech.com/devexp/oci/netbackup-exporter/nbu-admin-api"
+	"gitlab.tochka-tech.com/devexp/oci/netbackup-exporter/nbu-admin-api"
 	"html"
 	"net/http"
 	"strconv"
@@ -20,12 +21,13 @@ import (
 
 type NbuExporter struct {
 	nbuAdminApiClient *swagger.APIClient
+	lastCollectTime   time.Time
 	jobMetricsDataInc map[string]map[string]int
 }
 
 var (
 	nbuExporter      *NbuExporter
-	nbuReqTimeout    time.Duration
+	nbuHttpClinet    *http.Client
 	nbuJobsGetFilter string
 	nbuJobsPageLimit optional.Int32
 	jobsCounterVec   = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -35,41 +37,54 @@ var (
 )
 
 func init() {
-	flag.String("port", "", "listen metrics port")
+	flag.String("port", "9100", "listen metrics port")
 	flag.String("nbu.masterServer", "", "netBackup master server base url")
 	flag.String("nbu.apiKey", "", "The JSON Web Token (JWT) or API key for NBU")
-	flag.Duration("nbu.reqTimeout", 30000, "netBackup api request timeout")
+	flag.Duration("nbu.http.reqTimeout", 11*time.Second, "netBackup api request http timeout")
+	flag.Bool("nbu.http.insecureSkipVerify", false, "controls whether a client verifies the server's certificate chain and host name")
 	flag.String("nbu.jobsGetFilter", "", "Gets the list of jobs based on specified filters")
 	flag.Int("nbu.jobsPageLimit", 10, "The number of records on one page after the offset")
-	flag.Parse()
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	if err := viper.BindPFlags(pflag.CommandLine); err != nil {
-		glog.Exit(err)
+		glog.Fatal(err)
 	}
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
+	nbuJobsGetFilter = viper.GetString("nbu.jobsGetFilter")
+	nbuJobsPageLimit = optional.NewInt32(viper.GetInt32("nbu.jobsPageLimit"))
+	if viper.GetBool("nbu.http.insecureSkipVerify") {
+		nbuHttpClinet = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			}},
+		}
+	} else {
+		nbuHttpClinet = http.DefaultClient
+	}
+	nbuHttpClinet.Timeout = viper.GetDuration("nbu.reqTimeout")
 	nbuExporter = &NbuExporter{
 		nbuAdminApiClient: swagger.NewAPIClient(&swagger.Configuration{
 			BasePath:      viper.GetString("nbu.masterServer"),
 			DefaultHeader: map[string]string{"Authorization": viper.GetString("nbu.apiKey")},
 			UserAgent:     "gitlab.tochka-tech.com/devexp/oci/netbackup-exporter/1.0.0/go",
+			HTTPClient:    nbuHttpClinet,
 		}),
 		jobMetricsDataInc: make(map[string]map[string]int),
+		lastCollectTime:   time.Now(),
 	}
-	nbuReqTimeout = viper.GetDuration("nbu.reqTimeout")
-	nbuJobsGetFilter = viper.GetString("nbu.jobsGetFilter")
-	nbuJobsPageLimit = optional.NewInt32(viper.GetInt32("nbu.jobsPageLimit"))
 }
 
 // implements prometheus.Collector.
 func (e *NbuExporter) Describe(ch chan<- *prometheus.Desc) {
-	// empty
+	jobsCounterVec.Describe(ch)
 }
 
-// Todo one metric collect
 func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 	// Todo pass last colect time
-	nbuJobsGetFilterEndTime := fmt.Sprintf("endTime gt %s", time.Now())
+	endCollectTime := time.Now()
+	nbuJobsGetFilterEndTime := fmt.Sprintf("startTime ge %s and endTime le %s",
+		e.lastCollectTime.Format(time.RFC3339Nano), endCollectTime.Format(time.RFC3339Nano))
+	e.lastCollectTime = endCollectTime
 	var nbuJobsGetFilterOpt optional.String
 	if nbuJobsGetFilter == "" {
 		nbuJobsGetFilterOpt = optional.NewString(nbuJobsGetFilterEndTime)
@@ -77,16 +92,15 @@ func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 		nbuJobsGetFilterOpt = optional.NewString(fmt.Sprintf("%s and %s", nbuJobsGetFilter, nbuJobsGetFilterEndTime))
 	}
 	jobsPageOffset := optional.EmptyInt32()
+	ctx := context.Background()
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), nbuReqTimeout)
-		jobs, _, err := e.nbuAdminApiClient.JobsApi.AdminJobsGet(ctx, &swagger.JobsApiAdminJobsGetOpts{
+		jobs, resp, err := e.nbuAdminApiClient.JobsApi.AdminJobsGet(ctx, &swagger.JobsApiAdminJobsGetOpts{
 			Filter:     nbuJobsGetFilterOpt,
 			PageLimit:  nbuJobsPageLimit,
 			PageOffset: jobsPageOffset,
 		})
-		defer cancel()
 		if err != nil {
-			glog.Errorf("NbuExporter.AdminJobsGet: %v", err)
+			glog.Errorf("NbuExporter.AdminJobsGet: %v resp: %+v, filter: %s", err, resp, nbuJobsGetFilterOpt.Value())
 			break
 		}
 		for _, jobData := range jobs.Data {
@@ -98,13 +112,16 @@ func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 				strconv.FormatInt(int64(jobData.Attributes.Status), 10),
 			)
 			jobsCounterMetric.Inc()
-			ch <- jobsCounterMetric
+		}
+		if jobs.Meta == nil || jobs.Meta.Pagination == nil || jobs.Meta.Pagination.Last == 0 {
+			break
 		}
 		jobsPageOffset = optional.NewInt32(jobs.Meta.Pagination.Page)
 		if jobs.Meta.Pagination.Page == jobs.Meta.Pagination.Last {
 			break
 		}
 	}
+	jobsCounterVec.Collect(ch)
 }
 
 func main() {
