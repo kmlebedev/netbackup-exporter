@@ -14,6 +14,8 @@ import (
 	"gitlab.tochka-tech.com/devexp/oci/netbackup-exporter/nbu-admin-api"
 	"html"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +51,13 @@ func init() {
 		glog.Fatal(err)
 	}
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	if configFile, ok := os.LookupEnv("CONFIG_FILE"); ok {
+		viper.AddConfigPath(filepath.Dir(configFile))
+		viper.SetConfigFile(filepath.Base(configFile))
+		if err := viper.ReadInConfig(); err != nil {
+			glog.Fatalf("viper.ReadInConfig: %v", err)
+		}
+	}
 	viper.AutomaticEnv()
 	nbuJobsGetFilter = viper.GetString("nbu.jobsGetFilter")
 	nbuJobsPageLimit = optional.NewInt32(viper.GetInt32("nbu.jobsPageLimit"))
