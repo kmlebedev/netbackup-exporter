@@ -41,7 +41,7 @@ var (
 func init() {
 	flag.String("port", "9100", "listen metrics port")
 	flag.String("nbu.masterServer", "", "netBackup master server base url")
-	flag.String("nbu.apiKey", "", "The JSON Web Token (JWT) or API key for NBU")
+	flag.String("nbu.apiKey", "", "API key for NBU the /webui/security/api-keys")
 	flag.Duration("nbu.http.reqTimeout", 11*time.Second, "netBackup api request http timeout")
 	flag.String("nbu.CACert", "", "CA certificate from the master server using the GET /security/cacert API")
 	flag.Bool("nbu.http.insecureSkipVerify", false, "controls whether a client verifies the server's certificate chain and host name")
