@@ -1,3 +1,48 @@
 include:
   - project: devexp/gitlab-ci-templates
-    file: pipelines/build-autotag.yml
+    file: templates/templates.yml
+
+variables:
+  NAMESPACE: monitoring
+  HELM_VALUES_PATH: ./
+  ALERTS_TECH_TEMPLATE: ./alerts.yml
+  DEPLOY_TECH_GENERAL: "1"
+  HELM_APP_GROUP_NAME: "$CI_PROJECT_NAME"
+
+stages:
+  - build
+  - deploy
+
+alerts-tech:
+  extends: ".monitoring-alers-manager"
+  tags:
+    - tech
+    - general
+    - linux-k8s
+    - deploy
+  stage: deploy
+  variables:
+    KUBECTL_TOKEN: ${K8S_TECH_TOKEN}
+    ENVIRONMENT: tech
+    ALERTS_TEMPLATE: ${ALERTS_TECH_TEMPLATE}
+  rules:
+    - if: '$DEPLOY_TECH_GENERAL == "1" && $CI_COMMIT_TAG != null'
+      changes:
+        - ${ALERTS_TECH_TEMPLATE}
+
+deploy-tech-general:
+  extends: ".helm-multidc-deploy-hell"
+  stage: deploy
+  tags:
+    - tech
+    - general
+    - linux-k8s
+    - deploy
+  variables:
+    KUBECTL_TOKEN: ${K8S_TECH_TOKEN}
+    KUBE_CLUSTER: ${TECH_GENERAL_KUBE_CLUSTERS}
+    ENVIRONMENT: tech
+    IMAGE_TAG: "${CI_COMMIT_TAG}"
+  rules:
+    - if: '$DEPLOY_TECH_GENERAL == "1" && $CI_COMMIT_TAG'
+      when: manual
