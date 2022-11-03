@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"github.com/antihax/optional"
@@ -42,6 +43,7 @@ func init() {
 	flag.String("nbu.masterServer", "", "netBackup master server base url")
 	flag.String("nbu.apiKey", "", "The JSON Web Token (JWT) or API key for NBU")
 	flag.Duration("nbu.http.reqTimeout", 11*time.Second, "netBackup api request http timeout")
+	flag.String("nbu.CACert", "", "CA certificate from the master server using the GET /security/cacert API")
 	flag.Bool("nbu.http.insecureSkipVerify", false, "controls whether a client verifies the server's certificate chain and host name")
 	flag.String("nbu.jobsGetFilter", "", "Gets the list of jobs based on specified filters")
 	flag.Int("nbu.jobsPageLimit", 10, "The number of records on one page after the offset")
@@ -59,16 +61,25 @@ func init() {
 	viper.AutomaticEnv()
 	nbuJobsGetFilter = viper.GetString("nbu.jobsGetFilter")
 	nbuJobsPageLimit = optional.NewInt32(viper.GetInt32("nbu.jobsPageLimit"))
-	if viper.GetBool("nbu.http.insecureSkipVerify") {
-		nbuHttpClinet = &http.Client{
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			}},
+
+	tlsConfig := tls.Config{}
+	if nbuCaCert := viper.GetString("nbu.CACert"); nbuCaCert != "" {
+		caCertPool := x509.NewCertPool()
+		clientCACert, err := os.ReadFile(nbuCaCert)
+		if err != nil {
+			clientCACert = []byte(strings.ReplaceAll(nbuCaCert, "\\n", "\n"))
 		}
-	} else {
-		nbuHttpClinet = http.DefaultClient
+		ok := caCertPool.AppendCertsFromPEM(clientCACert)
+		glog.Debug("loaded %+v cert: %s", ok, string(clientCACert))
+		tlsConfig.RootCAs = caCertPool
+		tlsConfig.Certificates = []tls.Certificate{}
 	}
+	if viper.GetBool("nbu.http.insecureSkipVerify") {
+		tlsConfig.InsecureSkipVerify = true
+	}
+	nbuHttpClinet = &http.Client{Transport: &http.Transport{TLSClientConfig: &tlsConfig}}
 	nbuHttpClinet.Timeout = viper.GetDuration("nbu.reqTimeout")
+
 	nbuExporter = &NbuExporter{
 		nbuAdminApiClient: swagger.NewAPIClient(&swagger.Configuration{
 			BasePath:      viper.GetString("nbu.masterServer"),
