@@ -4,10 +4,13 @@ include:
 
 variables:
   NAMESPACE: monitoring
+  HELM_VERSION: 5.x
   HELM_VALUES_PATH: ./
+  HELM_DEPLOY_TIMEOUT: 5m
   ALERTS_TECH_TEMPLATE: ./alerts.yml
   DEPLOY_TECH_GENERAL: "1"
   HELM_APP_GROUP_NAME: "$CI_PROJECT_NAME"
+  TECH_GENERAL_KUBE_CLUSTERS: tech-dcdp,tech-dcix
 
 stages:
   - build
