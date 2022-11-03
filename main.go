@@ -15,7 +15,6 @@ import (
 	"html"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -52,8 +51,7 @@ func init() {
 	}
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	if configFile, ok := os.LookupEnv("CONFIG_FILE"); ok {
-		viper.AddConfigPath(filepath.Dir(configFile))
-		viper.SetConfigFile(filepath.Base(configFile))
+		viper.SetConfigFile(configFile)
 		if err := viper.ReadInConfig(); err != nil {
 			glog.Fatalf("viper.ReadInConfig: %v", err)
 		}
