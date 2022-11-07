@@ -161,10 +161,10 @@ func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 		if jobs.Meta == nil || jobs.Meta.Pagination == nil || jobs.Meta.Pagination.Last == 0 {
 			break
 		}
-		jobsPageOffset = optional.NewInt32(jobs.Meta.Pagination.Page)
-		if jobs.Meta.Pagination.Page == jobs.Meta.Pagination.Last {
+		if jobs.Meta.Pagination.Next == 0 {
 			break
 		}
+		jobsPageOffset = optional.NewInt32(jobs.Meta.Pagination.Next)
 	}
 	jobsKilobytesTransferredVec.Collect(ch)
 	jobsElapsedTimeHistogram.Collect(ch)
@@ -179,7 +179,9 @@ func main() {
 	glog.Infof("Start listen %s", addr)
 	http.Handle("/metrics", handler)
 	http.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "ok, %q", html.EscapeString(r.URL.Path))
+		if _, err := fmt.Fprintf(w, "ok, %q", html.EscapeString(r.URL.Path)); err != nil {
+			glog.Errorf("redy Fprintf: %v", err)
+		}
 	})
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		glog.Fatalf("http.ListenAndServer: %v", err)
