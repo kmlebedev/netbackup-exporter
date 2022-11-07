@@ -21,6 +21,11 @@ import (
 	"time"
 )
 
+const (
+	promNamespace = "nbu"
+	promSubsystem = "jobs"
+)
+
 type NbuExporter struct {
 	nbuAdminApiClient *swagger.APIClient
 	lastCollectTime   time.Time
@@ -28,14 +33,24 @@ type NbuExporter struct {
 }
 
 var (
-	nbuExporter      *NbuExporter
-	nbuHttpClinet    *http.Client
-	nbuJobsGetFilter string
-	nbuJobsPageLimit optional.Int32
-	jobsCounterVec   = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "nbu_jobs_total",
-		Help: "The total number of netbackup jobs",
-	}, []string{"state", "type", "policyType", "clientName", "status"})
+	nbuExporter              *NbuExporter
+	nbuHttpClinet            *http.Client
+	nbuJobsGetFilter         string
+	nbuJobsPageLimit         optional.Int32
+	jobLables                = []string{"state", "type", "policyType", "clientName", "status"}
+	jobsElapsedTimeHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: promNamespace,
+		Subsystem: promSubsystem,
+		Name:      "elapsed_time",
+		Help:      "The elapsed time of netbackup jobs",
+		Buckets:   []float64{1, 30, 60, 120, 300, 600, 720, 900, 1200, 1800, 2400, 3000, 3600, 5400, 7200, 10800, 140400},
+	}, jobLables)
+	jobsKilobytesTransferredVec = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: promNamespace,
+		Subsystem: promSubsystem,
+		Name:      "kilobytes_transferred_total",
+		Help:      "The total kilobytes transferred of netbackup jobs",
+	}, jobLables)
 )
 
 func init() {
@@ -94,7 +109,8 @@ func init() {
 
 // implements prometheus.Collector.
 func (e *NbuExporter) Describe(ch chan<- *prometheus.Desc) {
-	jobsCounterVec.Describe(ch)
+	jobsKilobytesTransferredVec.Describe(ch)
+	jobsElapsedTimeHistogram.Describe(ch)
 }
 
 func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
@@ -122,14 +138,25 @@ func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 			break
 		}
 		for _, jobData := range jobs.Data {
-			jobsCounterMetric := jobsCounterVec.WithLabelValues(
-				jobData.Attributes.State,
-				jobData.Attributes.JobType,
-				jobData.Attributes.PolicyType,
-				jobData.Attributes.ClientName,
-				strconv.FormatInt(int64(jobData.Attributes.Status), 10),
-			)
-			jobsCounterMetric.Inc()
+			if jobData.Attributes.KilobytesTransferred > 0 {
+				jobsKilobytesTransferredVec.WithLabelValues(
+					jobData.Attributes.State,
+					jobData.Attributes.JobType,
+					jobData.Attributes.PolicyType,
+					jobData.Attributes.ClientName,
+					strconv.FormatInt(int64(jobData.Attributes.Status), 10),
+				).Add(float64(jobData.Attributes.KilobytesTransferred))
+			}
+
+			if !jobData.Attributes.EndTime.IsZero() && !jobData.Attributes.StartTime.IsZero() {
+				jobsElapsedTimeHistogram.WithLabelValues(
+					jobData.Attributes.State,
+					jobData.Attributes.JobType,
+					jobData.Attributes.PolicyType,
+					jobData.Attributes.ClientName,
+					strconv.FormatInt(int64(jobData.Attributes.Status), 10),
+				).Observe(jobData.Attributes.EndTime.Sub(jobData.Attributes.StartTime).Seconds())
+			}
 		}
 		if jobs.Meta == nil || jobs.Meta.Pagination == nil || jobs.Meta.Pagination.Last == 0 {
 			break
@@ -139,7 +166,8 @@ func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 			break
 		}
 	}
-	jobsCounterVec.Collect(ch)
+	jobsKilobytesTransferredVec.Collect(ch)
+	jobsElapsedTimeHistogram.Collect(ch)
 }
 
 func main() {
