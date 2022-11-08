@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  server:
+    image: kmlebedev/netbackup-exporter
+    ports:
+      - 9000:9000
+    environment:
+      PORT: 9000

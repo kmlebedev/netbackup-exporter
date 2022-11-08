@@ -1,3 +1,0 @@
-include:
-  - project: devexp/gitlab-ci-templates
-    file: pipelines/build-autotag.yml

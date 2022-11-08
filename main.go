@@ -7,12 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/antihax/optional"
+	"github.com/kmlebedev/netbackup-exporter/nbu-admin-api"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	glog "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"gitlab.tochka-tech.com/devexp/oci/netbackup-exporter/nbu-admin-api"
 	"html"
 	"net/http"
 	"os"
@@ -99,7 +99,7 @@ func init() {
 		nbuAdminApiClient: swagger.NewAPIClient(&swagger.Configuration{
 			BasePath:      viper.GetString("nbu.masterServer"),
 			DefaultHeader: map[string]string{"Authorization": viper.GetString("nbu.apiKey")},
-			UserAgent:     "gitlab.tochka-tech.com/devexp/oci/netbackup-exporter/1.0.0/go",
+			UserAgent:     "github.com/kmlebedev/netbackup-exporter/1.0.0/go",
 			HTTPClient:    nbuHttpClinet,
 		}),
 		jobMetricsDataInc: make(map[string]map[string]int),
