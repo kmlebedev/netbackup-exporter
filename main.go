@@ -33,11 +33,18 @@ type NbuExporter struct {
 }
 
 var (
-	nbuExporter              *NbuExporter
-	nbuHttpClinet            *http.Client
-	nbuJobsGetFilter         string
-	nbuJobsPageLimit         optional.Int32
-	jobLables                = []string{"state", "type", "policyType", "clientName", "status"}
+	nbuExporter           *NbuExporter
+	nbuHttpClinet         *http.Client
+	nbuJobsGetFilter      string
+	nbuJobsPageLimit      optional.Int32
+	nbuJobsLast           time.Duration
+	jobLables             = []string{"state", "type", "policyType", "policyName", "clientName", "status"}
+	jobsTotalLastHoursAgo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: promNamespace,
+		Subsystem: promSubsystem,
+		Name:      "last_hours_ago_total",
+		Help:      "Total number of netbackup jobs in a few hours",
+	}, jobLables)
 	jobsElapsedTimeHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: promNamespace,
 		Subsystem: promSubsystem,
@@ -55,6 +62,7 @@ var (
 
 func init() {
 	flag.String("port", "9100", "listen metrics port")
+	flag.Duration("nbu.jobsLast", 12*time.Hour, "retrieve the information on the backup jobs behind aggregation time")
 	flag.String("nbu.masterServer", "", "netBackup master server base url")
 	flag.String("nbu.apiKey", "", "API key for NBU the /webui/security/api-keys")
 	flag.Duration("nbu.http.reqTimeout", 11*time.Second, "netBackup api request http timeout")
@@ -94,6 +102,7 @@ func init() {
 	}
 	nbuHttpClinet = &http.Client{Transport: &http.Transport{TLSClientConfig: &tlsConfig}}
 	nbuHttpClinet.Timeout = viper.GetDuration("nbu.reqTimeout")
+	nbuJobsLast = viper.GetDuration("nbu.jobsLast")
 
 	nbuExporter = &NbuExporter{
 		nbuAdminApiClient: swagger.NewAPIClient(&swagger.Configuration{
@@ -113,46 +122,49 @@ func (e *NbuExporter) Describe(ch chan<- *prometheus.Desc) {
 	jobsElapsedTimeHistogram.Describe(ch)
 }
 
-func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
-	// Todo pass last colect time
-	endCollectTime := time.Now()
-	nbuJobsGetFilterEndTime := fmt.Sprintf("startTime ge %s and endTime le %s",
-		e.lastCollectTime.Format(time.RFC3339Nano), endCollectTime.Format(time.RFC3339Nano))
-	e.lastCollectTime = endCollectTime
-	var nbuJobsGetFilterOpt optional.String
-	if nbuJobsGetFilter == "" {
-		nbuJobsGetFilterOpt = optional.NewString(nbuJobsGetFilterEndTime)
-	} else {
-		nbuJobsGetFilterOpt = optional.NewString(fmt.Sprintf("%s and %s", nbuJobsGetFilter, nbuJobsGetFilterEndTime))
-	}
+func (e *NbuExporter) GetAdminJobs(filter optional.String, isFewHoursAgo bool) {
 	jobsPageOffset := optional.EmptyInt32()
 	ctx := context.Background()
 	for {
 		jobs, resp, err := e.nbuAdminApiClient.JobsApi.AdminJobsGet(ctx, &swagger.JobsApiAdminJobsGetOpts{
-			Filter:     nbuJobsGetFilterOpt,
+			Filter:     filter,
 			PageLimit:  nbuJobsPageLimit,
 			PageOffset: jobsPageOffset,
 		})
 		if err != nil {
-			glog.Errorf("NbuExporter.AdminJobsGet: %v resp: %+v, filter: %s", err, resp, nbuJobsGetFilterOpt.Value())
+			glog.Errorf("NbuExporter.AdminJobsGet: %v resp: %+v, filter: %s", err, resp, filter.Value())
 			break
 		}
 		for _, jobData := range jobs.Data {
-			if jobData.Attributes.KilobytesTransferred > 0 {
-				jobsKilobytesTransferredVec.WithLabelValues(
+			if isFewHoursAgo {
+				jobsTotalLastHoursAgo.WithLabelValues(
 					jobData.Attributes.State,
 					jobData.Attributes.JobType,
 					jobData.Attributes.PolicyType,
+					jobData.Attributes.PolicyName,
 					jobData.Attributes.ClientName,
-					strconv.FormatInt(int64(jobData.Attributes.Status), 10),
-				).Add(float64(jobData.Attributes.KilobytesTransferred))
-			}
+					strconv.FormatInt(int64(jobData.Attributes.Status), 10)).Inc()
+			} else {
+				if jobData.Attributes.KilobytesTransferred > 0 {
+					jobsKilobytesTransferredVec.WithLabelValues(
+						jobData.Attributes.State,
+						jobData.Attributes.JobType,
+						jobData.Attributes.PolicyType,
+						jobData.Attributes.PolicyName,
+						jobData.Attributes.ClientName,
+						strconv.FormatInt(int64(jobData.Attributes.Status), 10),
+					).Add(float64(jobData.Attributes.KilobytesTransferred))
+				}
 
-			if !jobData.Attributes.EndTime.IsZero() && !jobData.Attributes.StartTime.IsZero() {
+				if jobData.Attributes.StartTime.IsZero() || jobData.Attributes.EndTime.IsZero() ||
+					jobData.Attributes.StartTime.Unix() >= jobData.Attributes.EndTime.Unix() {
+					continue
+				}
 				jobsElapsedTimeHistogram.WithLabelValues(
 					jobData.Attributes.State,
 					jobData.Attributes.JobType,
 					jobData.Attributes.PolicyType,
+					jobData.Attributes.PolicyName,
 					jobData.Attributes.ClientName,
 					strconv.FormatInt(int64(jobData.Attributes.Status), 10),
 				).Observe(jobData.Attributes.EndTime.Sub(jobData.Attributes.StartTime).Seconds())
@@ -166,8 +178,28 @@ func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 		}
 		jobsPageOffset = optional.NewInt32(jobs.Meta.Pagination.Next)
 	}
+}
+
+func getJobsFilter(start time.Time, end time.Time) optional.String {
+	filter := fmt.Sprintf("startTime ge %s and endTime le %s",
+		start.Format(time.RFC3339Nano), end.Format(time.RFC3339Nano))
+	if nbuJobsGetFilter != "" {
+		filter = fmt.Sprintf("%s and %s", filter, nbuJobsGetFilter)
+	}
+	return optional.NewString(filter)
+}
+
+func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
+	endCollectTime := time.Now()
+	e.GetAdminJobs(getJobsFilter(e.lastCollectTime, endCollectTime), false)
 	jobsKilobytesTransferredVec.Collect(ch)
 	jobsElapsedTimeHistogram.Collect(ch)
+	if nbuJobsLast > 0 {
+		e.GetAdminJobs(getJobsFilter(e.lastCollectTime.Add(-nbuJobsLast), endCollectTime), true)
+		jobsTotalLastHoursAgo.Collect(ch)
+	}
+	e.lastCollectTime = endCollectTime
+	jobsTotalLastHoursAgo.Reset()
 }
 
 func main() {
