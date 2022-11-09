@@ -82,6 +82,7 @@ func init() {
 		}
 	}
 	viper.AutomaticEnv()
+	pflag.Parse()
 	nbuJobsGetFilter = viper.GetString("nbu.jobsGetFilter")
 	nbuJobsPageLimit = optional.NewInt32(viper.GetInt32("nbu.jobsPageLimit"))
 
