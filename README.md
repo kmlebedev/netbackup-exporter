@@ -1,6 +1,7 @@
 # netbackup-exporter
 
 Netbackup admin job metrics exporter to prometheus
+![Screenshot 2022-11-11 at 09 08 31](https://user-images.githubusercontent.com/9497591/201261575-a1f05ef9-6ccd-45ac-8a4f-82bc351e2a90.png)
 
 ## Getting started
 
