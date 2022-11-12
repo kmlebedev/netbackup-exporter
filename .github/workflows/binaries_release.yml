@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-release-binaries:
-    name: Build netcitybot
+    name: Build netbackup-exporter
     permissions:
       contents: write  # for wangyoucao577/go-release-action to upload release assets
     runs-on: self-hosted
