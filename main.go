@@ -241,6 +241,7 @@ func getJobsFilter(start time.Time) optional.String {
 func (e *NbuExporter) Collect(ch chan<- prometheus.Metric) {
 	lastCollectTime := time.Now()
 
+	jobsTransferRateVec.Reset()
 	jobCount := e.GetAdminJobs(getJobsFilter(e.lastCollectTime), func(jobData swagger.ManualBackupResponseData) {
 		if jobData.Attributes.KilobytesTransferred > 0 {
 			jobsKilobytesTransferredMetric := jobsKilobytesTransferredVec.WithLabelValues(
