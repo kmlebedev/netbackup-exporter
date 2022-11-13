@@ -1,4 +1,4 @@
-name: "docker: build release containers for normal volume"
+name: "docker: build release container"
 
 on:
   push:
