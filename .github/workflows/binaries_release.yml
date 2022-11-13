@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Go Release server
-        uses: kmlebedev/go-release-action@v1.33
+        uses: docker.io/kmlebedev/go-release-action@c89b775fc2783be8a9749ae634f29569788e7abbe963bf78146e0754eb53c6aa # v1.33
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
